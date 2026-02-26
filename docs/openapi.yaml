@@ -1,0 +1,544 @@
+openapi: 3.1.0
+info:
+  title: Cajal ICBM API
+  version: "1.0"
+  description: |
+    Internal Connectivity & Bandwidth Monitor REST API.
+    Authentication: session cookie (browser) or Bearer API token (programmatic).
+    All state-changing requests from cookie-authenticated clients require a matching Origin header (CSRF protection).
+
+servers:
+  - url: http://localhost:4000
+    description: Local development
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: cajal_sid
+    bearerToken:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code:  { type: string }
+        field: { type: string }
+
+    Site:
+      type: object
+      properties:
+        id:       { type: string }
+        name:     { type: string }
+        category: { type: string, enum: [internal, external] }
+        role:     { type: string, enum: [firewall, collector, generic] }
+        status:   { type: string, enum: [up, down, warn, unknown] }
+        sectionId: { type: string }
+        internalIp: { type: string }
+        telemetry:
+          type: object
+          properties:
+            syslog:  { type: boolean }
+            snmp:    { type: boolean }
+            netflow: { type: boolean }
+        monitorConfig:
+          type: object
+        metrics:
+          type: object
+
+    Device:
+      type: object
+      properties:
+        id:      { type: string }
+        name:    { type: string }
+        type:    { type: string }
+        siteId:  { type: string }
+        ip:      { type: string }
+        status:  { type: string }
+        lastSeen: { type: string, format: date-time }
+
+    Event:
+      type: object
+      properties:
+        id:      { type: string }
+        ts:      { type: string, format: date-time }
+        classId: { type: integer }
+        source:  { type: string }
+        actor:   { type: string }
+        action:  { type: string }
+        message: { type: string }
+        detail:  { type: string }
+
+    ApiToken:
+      type: object
+      properties:
+        id:          { type: string }
+        name:        { type: string }
+        role:        { type: string, enum: [admin, monitor] }
+        scopes:      { type: array, items: { type: string } }
+        tokenPrefix: { type: string }
+        createdAt:   { type: string, format: date-time }
+        expiresAt:   { type: string, format: date-time }
+        revokedAt:   { type: string }
+        status:      { type: string, enum: [active, expired, revoked] }
+
+    HealthPayload:
+      type: object
+      properties:
+        ok:      { type: boolean }
+        status:  { type: string, enum: [ok, degraded, fail] }
+        timestamp: { type: string, format: date-time }
+        version: { type: string }
+        uptimeSec: { type: integer }
+        checks:  { type: array, items: { type: object } }
+        summary: { type: object }
+        database: { type: object }
+        storage:  { type: object }
+        dependencies: { type: object }
+
+security:
+  - cookieAuth: []
+  - bearerToken: []
+
+paths:
+
+  # ── Public ────────────────────────────────────────────────────────────────
+
+  /api/health:
+    get:
+      summary: Health check
+      tags: [Public]
+      security: []
+      responses:
+        "200": { description: Healthy or degraded, content: { application/json: { schema: { $ref: "#/components/schemas/HealthPayload" } } } }
+        "503": { description: Failed }
+
+  /metrics:
+    get:
+      summary: Prometheus metrics (admin only)
+      tags: [Observability]
+      responses:
+        "200": { description: Prometheus text format, content: { "text/plain": { schema: { type: string } } } }
+        "403": { description: Forbidden }
+
+  # ── Auth ─────────────────────────────────────────────────────────────────
+
+  /api/auth/me:
+    get:
+      summary: Current session user
+      tags: [Auth]
+      responses:
+        "200": { description: Authenticated user }
+        "401": { description: Not authenticated }
+
+  /api/auth/local/login:
+    post:
+      summary: Local username/password login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:    { type: string }
+                password: { type: string }
+                totp:     { type: string }
+      responses:
+        "200": { description: Login successful }
+        "401": { description: Invalid credentials }
+        "429": { description: Rate limited }
+
+  /api/auth/local/logout:
+    post:
+      summary: Logout current session
+      tags: [Auth]
+      responses:
+        "200": { description: Logged out }
+
+  /api/auth/local/change-password:
+    post:
+      summary: Change own password
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword:     { type: string }
+      responses:
+        "200": { description: Password changed }
+        "400": { description: Validation error }
+        "403": { description: Forbidden }
+
+  # ── Sites ─────────────────────────────────────────────────────────────────
+
+  /api/sites:
+    get:
+      summary: List all sites
+      tags: [Sites]
+      responses:
+        "200":
+          description: Site list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sites: { type: array, items: { $ref: "#/components/schemas/Site" } }
+    post:
+      summary: Create a site
+      tags: [Sites]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Site" }
+      responses:
+        "200": { description: Site created }
+        "400": { description: Validation error }
+        "403": { description: Forbidden }
+
+  /api/sites/{siteId}:
+    parameters:
+      - name: siteId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a site
+      tags: [Sites]
+      responses:
+        "200": { description: Site }
+        "404": { description: Not found }
+    patch:
+      summary: Update a site
+      tags: [Sites]
+      responses:
+        "200": { description: Updated }
+        "403": { description: Forbidden }
+    delete:
+      summary: Delete a site
+      tags: [Sites]
+      responses:
+        "200": { description: Deleted }
+        "403": { description: Forbidden }
+
+  # ── Devices ───────────────────────────────────────────────────────────────
+
+  /api/devices:
+    get:
+      summary: List all devices
+      tags: [Devices]
+      responses:
+        "200":
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices: { type: array, items: { $ref: "#/components/schemas/Device" } }
+    post:
+      summary: Create a device
+      tags: [Devices]
+      responses:
+        "200": { description: Device created }
+        "403": { description: Forbidden }
+
+  /api/devices/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      summary: Update a device
+      tags: [Devices]
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Delete a device
+      tags: [Devices]
+      responses:
+        "200": { description: Deleted }
+
+  # ── Events & Audit ────────────────────────────────────────────────────────
+
+  /api/events:
+    get:
+      summary: List events
+      tags: [Events]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 200, maximum: 5000 }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+        - name: class
+          in: query
+          schema: { type: integer }
+        - name: source
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events: { type: array, items: { $ref: "#/components/schemas/Event" } }
+
+  /api/events/export:
+    get:
+      summary: Export events as CSV or JSON download
+      tags: [Events]
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200": { description: File download }
+
+  /api/events/manual-refresh:
+    post:
+      summary: Trigger a manual global refresh event
+      tags: [Events]
+      responses:
+        "200": { description: Refresh event logged }
+        "403": { description: Forbidden }
+
+  /api/audit:
+    get:
+      summary: List security audit events
+      tags: [Events]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 200 }
+      responses:
+        "200": { description: Audit events }
+
+  # ── Settings ──────────────────────────────────────────────────────────────
+
+  /api/settings:
+    get:
+      summary: Get runtime settings
+      tags: [Settings]
+      responses:
+        "200": { description: Runtime settings }
+    patch:
+      summary: Update runtime settings
+      tags: [Settings]
+      responses:
+        "200": { description: Updated }
+        "403": { description: Forbidden }
+
+  /api/settings/api/tokens:
+    get:
+      summary: List API tokens
+      tags: [Settings]
+      responses:
+        "200": { description: Token list }
+    post:
+      summary: Create API token
+      tags: [Settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role, expiresAt]
+              properties:
+                name:        { type: string }
+                role:        { type: string, enum: [admin, monitor] }
+                expiresAt:   { type: string, format: date-time }
+                scopes:      { type: array, items: { type: string } }
+                ipAllowlist: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Token created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: Plain-text token shown once only }
+        "400": { description: Validation error }
+        "429": { description: Rate limited }
+
+  /api/settings/api/tokens/{tokenId}/revoke:
+    parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Revoke an API token
+      tags: [Settings]
+      responses:
+        "200": { description: Token revoked }
+        "404": { description: Not found }
+
+  /api/settings/firewall-check:
+    get:
+      summary: Run local firewall / listener diagnostics
+      tags: [Settings]
+      responses:
+        "200": { description: Diagnostic results }
+        "403": { description: Forbidden }
+
+  /api/settings/system-health:
+    get:
+      summary: Detailed system health (admin)
+      tags: [Settings]
+      responses:
+        "200": { description: System health }
+        "403": { description: Forbidden }
+
+  /api/settings/storage:
+    get:
+      summary: Storage summary
+      tags: [Settings]
+      responses:
+        "200": { description: Storage info }
+        "403": { description: Forbidden }
+
+  # ── Backup ────────────────────────────────────────────────────────────────
+
+  /api/backup/export:
+    post:
+      summary: Full encrypted backup export
+      tags: [Backup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, minLength: 6 }
+      responses:
+        "200":
+          description: Backup file
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filename: { type: string }
+                  backup:   { type: object }
+        "400": { description: Validation error }
+        "403": { description: Forbidden }
+
+  /api/backup/export/incremental:
+    post:
+      summary: Incremental encrypted backup (changes since last full backup)
+      tags: [Backup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, minLength: 6 }
+      responses:
+        "200":
+          description: Incremental backup file
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filename:         { type: string }
+                  incrementalSince: { type: string, format: date-time, nullable: true }
+                  sitesIncluded:    { type: integer }
+                  devicesIncluded:  { type: integer }
+                  backup:           { type: object }
+        "403": { description: Forbidden }
+
+  /api/backup/import:
+    post:
+      summary: Restore from encrypted backup
+      tags: [Backup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, backup]
+              properties:
+                password: { type: string }
+                backup:   { type: object }
+      responses:
+        "200": { description: Restore successful }
+        "400": { description: Invalid backup or password }
+        "403": { description: Forbidden }
+
+  # ── Agent ─────────────────────────────────────────────────────────────────
+
+  /api/agent/linux/download:
+    get:
+      summary: Download Linux collector agent package
+      tags: [Agent]
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [deb, sh], default: deb }
+      responses:
+        "200": { description: Agent package }
+        "403": { description: Forbidden }
+
+  /api/agent/windows/download:
+    get:
+      summary: Download Windows collector agent package
+      tags: [Agent]
+      responses:
+        "200": { description: Agent EXE }
+        "403": { description: Forbidden }
+
+  /api/sites/{siteId}/collector/command:
+    parameters:
+      - name: siteId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Queue a command for a collector agent
+      tags: [Agent]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command: { type: string }
+                args:    { type: object }
+      responses:
+        "200": { description: Command queued }
+        "403": { description: Forbidden }
+        "404": { description: Site not found }

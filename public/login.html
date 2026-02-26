@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cajal ICBM Login</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="login-layout">
+      <section class="panel login-panel">
+        <h1>Cajal ICBM</h1>
+        <p>Internal Connectivity &amp; Bandwidth Monitor</p>
+        <form id="loginForm" class="login-form">
+          <label>Username <input id="username" name="username" autocomplete="username" required /></label>
+          <label>Password <input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+          <button type="submit">Log In</button>
+        </form>
+        <p id="loginMsg"></p>
+      </section>
+    </main>
+
+    <dialog id="registerDialog" class="local-auth-dialog">
+      <form id="registerForm" method="dialog" class="local-auth-form" novalidate>
+        <h3>User Registration</h3>
+        <p id="registerMsg">Enter your assigned username to continue setup.</p>
+        <label>Username
+          <input id="registerUsername" name="username" autocomplete="username" required />
+        </label>
+        <label id="registerPasswordWrap" hidden>Password
+          <input id="registerPassword" name="password" type="password" autocomplete="new-password" />
+        </label>
+        <p id="registerPasswordReq">Password requirements: minimum 10 characters.</p>
+        <label id="registerTotpWrap" hidden>TOTP Code
+          <input id="registerTotp" name="totp" inputmode="numeric" maxlength="6" placeholder="123456" />
+        </label>
+        <div id="registerQrWrap" class="local-auth-qr" hidden>
+          <img id="registerQrImage" alt="TOTP QR code" />
+          <code id="registerSecret"></code>
+        </div>
+        <div class="local-auth-actions">
+          <button id="registerSubmit" type="submit">Continue</button>
+          <button id="registerCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/login.js" defer></script>
+  </body>
+  </html>

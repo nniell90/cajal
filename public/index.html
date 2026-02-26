@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cajal ICBM</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div>
+          <h1>
+            <a class="brand-link" href="https://en.wikipedia.org/wiki/Santiago_Ram%C3%B3n_y_Cajal" target="_blank" rel="noopener noreferrer">CAJAL ICBM</a>
+            <button type="button" class="version-patch-badge" data-help-section="patch-notes">Patch Notes</button>
+          </h1>
+          <p class="brand-subline">
+            <span>Internal Connectivity &amp; Bandwidth Monitor</span>
+            <span class="version-meta-inline">
+              <span class="version-label-inline">Version 1.1</span>
+            </span>
+          </p>
+        </div>
+      </div>
+      <div class="top-center">
+        <div id="refreshClock" class="refresh-clock" aria-live="polite">Global Data Refresh 01:00</div>
+        <div id="systemClock" class="system-clock">System Clock --:--:--</div>
+        <div id="systemUptime" class="system-uptime">System Uptime 00:00:00</div>
+      </div>
+      <div class="top-actions">
+        <span id="topRoleBadge" class="top-role-badge">Monitor</span>
+        <button id="helpBtn" type="button" class="ghost-btn">Help</button>
+        <button id="auditTrailBtn" type="button" class="ghost-btn">Audit Trail</button>
+        <button id="settingsBtn" type="button" class="ghost-btn">Settings</button>
+        <button id="authActionBtn" type="button" class="ghost-btn auth-btn">Login</button>
+      </div>
+    </header>
+    <section class="change-ticker" aria-live="polite">
+      <div id="changeTicker" class="change-ticker-track">No changes detected in the last 24 hours.</div>
+    </section>
+    <section id="auditPanel" class="panel event-panel" hidden>
+      <div class="panel-head panel-head-row">
+        <h2>Audit Trail</h2>
+        <div class="panel-actions">
+          <button id="auditRefreshBtn" type="button" class="ghost-btn">Refresh</button>
+          <button id="auditCloseBtn" type="button" class="ghost-btn">Close</button>
+        </div>
+      </div>
+      <div id="auditTrailList" class="audit-list"></div>
+    </section>
+    <section id="settingsPanel" class="settings-panel" hidden>
+      <div class="settings-panel-head">
+        <h3>Settings</h3>
+        <button id="closeSettingsBtn" type="button" class="ghost-btn">Close</button>
+      </div>
+      <section id="userAdminPanel" class="user-admin-panel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>1. User Management</span></button>
+        <div class="settings-content">
+          <div id="userList" class="user-list"></div>
+          <form id="addUserForm" class="add-user-form">
+            <input name="email" type="text" placeholder="username or user@example.com" required />
+            <input name="displayName" type="text" placeholder="Display Name (optional)" />
+            <select name="role">
+              <option value="monitor">Monitor</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button type="submit">Add User</button>
+          </form>
+          <p id="userAdminMsg"></p>
+        </div>
+      </section>
+      <section id="locationAdminPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>2. Location Management</span></button>
+        <div class="settings-content">
+          <form id="locationConfigForm" class="settings-compact-form">
+            <label>Company Name
+              <input name="companyName" placeholder="Four Square Health Care" />
+            </label>
+            <label>Location 1 Title
+              <input name="internalName" placeholder="Location 1" />
+            </label>
+            <label>Location 2 Title
+              <input name="customerName" placeholder="Location 2" />
+            </label>
+            <button type="submit">Save Location Labels</button>
+          </form>
+          <div id="locationSectionList" class="location-list"></div>
+          <p id="locationAdminMsg"></p>
+        </div>
+      </section>
+      <section id="ssoConfigPanel" class="sso-config-panel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>3. SSO Configuration</span></button>
+        <div class="settings-content">
+          <p id="ssoStatusLine">SSO: Not configured</p>
+          <p id="systemDepsLine" class="system-deps-line">System CLI Dependency: Checking...</p>
+          <div class="settings-actions">
+            <button id="ssoLoginBtn" type="button">Login with Entra</button>
+            <button id="syncNowBtn" type="button" class="ghost-btn">Sync Now</button>
+          </div>
+          <form id="ssoConfigForm" class="sso-config-form">
+            <input name="tenantId" placeholder="Tenant ID" />
+            <input name="clientId" placeholder="Client ID" />
+            <input name="clientSecret" type="password" placeholder="Client Secret" />
+            <input name="redirectUri" placeholder="Redirect URI" />
+            <input name="scope" placeholder="Scope (openid profile email)" />
+            <button type="submit">Save SSO Config</button>
+          </form>
+          <p id="ssoConfigMsg"></p>
+        </div>
+      </section>
+      <section id="sslConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>4. SSL Certificate</span></button>
+        <div class="settings-content">
+          <form id="sslConfigForm" class="settings-compact-form">
+            <textarea name="certPem" rows="4" placeholder="Certificate PEM"></textarea>
+            <textarea name="keyPem" rows="4" placeholder="Private Key PEM"></textarea>
+            <textarea name="caPem" rows="4" placeholder="CA Chain PEM (optional)"></textarea>
+            <button type="submit">Save SSL Config</button>
+          </form>
+          <p id="sslConfigMsg"></p>
+        </div>
+      </section>
+      <section id="teamsConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>5. Teams Notifications</span></button>
+        <div class="settings-content">
+          <form id="teamsConfigForm" class="settings-compact-form">
+            <label>Teams Webhook URL
+              <input name="teamsWebhookUrl" type="url" placeholder="https://outlook.office.com/webhook/..." />
+            </label>
+            <label>Webhook Timeout (ms)
+              <input name="teamsWebhookTimeoutMs" type="number" min="1000" max="120000" placeholder="8000" />
+            </label>
+            <label>Payload Title
+              <input id="teamsPayloadTitle" type="text" placeholder="[CAJAL TEST] Power Automate webhook" />
+            </label>
+            <label>Payload Group
+              <input id="teamsPayloadGroup" name="teamsPayloadGroup" type="text" placeholder="cajal" />
+            </label>
+            <label>Payload Message
+              <textarea id="teamsPayloadMessage" rows="3" placeholder="This is a test webhook payload from CAJAL."></textarea>
+            </label>
+            <div class="settings-actions">
+              <button type="submit">Save Teams Settings</button>
+              <button id="teamsConfigTestBtn" type="button" class="ghost-btn">Send Webhook Test</button>
+            </div>
+          </form>
+          <p id="teamsConfigMsg"></p>
+        </div>
+      </section>
+      <section id="webhookRoutingPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>6. Webhook Routing</span></button>
+        <div class="settings-content">
+          <p class="webhook-routing-help">Template tokens: <code>{{status}}</code> <code>{{previousStatus}}</code> <code>{{siteName}}</code> <code>{{siteRole}}</code> <code>{{locationName}}</code> <code>{{reason}}</code> <code>{{detail}}</code> <code>{{routeId}}</code> <code>{{routeLabel}}</code> <code>{{section}}</code> <code>{{signal}}</code> <code>{{timestamp}}</code> <code>{{wanIp1}}</code> <code>{{wanIp2}}</code> <code>{{agentHost}}</code> <code>{{agentLocalIp}}</code> <code>{{agentRemoteIp}}</code> <code>{{serviceLabel}}</code> <code>{{serviceTarget}}</code></p>
+          <div id="webhookRoutingContent" class="webhook-routing-grid"></div>
+          <p id="webhookRoutingMsg"></p>
+        </div>
+      </section>
+      <section id="clockConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>7. Clock Settings</span></button>
+        <div class="settings-content">
+          <form id="clockConfigForm" class="settings-compact-form">
+            <label>Time Zone
+              <input name="globalClockTimeZone" placeholder="IANA, e.g. America/Chicago" />
+            </label>
+            <label>Display Format
+              <select name="globalClockHourMode">
+                <option value="24h">24-hour</option>
+                <option value="12h">12-hour</option>
+              </select>
+            </label>
+            <button type="submit">Save Clock Settings</button>
+          </form>
+          <p id="clockConfigMsg"></p>
+        </div>
+      </section>
+      <section id="systemHealthPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>8. System Health</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <button id="refreshSystemHealthBtn" type="button" class="ghost-btn">Refresh Health</button>
+          </div>
+          <div id="versionCheckSection" class="version-check-section"></div>
+          <div id="systemHealthContent" class="system-health-grid"></div>
+          <p id="systemHealthMsg"></p>
+        </div>
+      </section>
+      <section id="backupPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>9. Backup</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <button id="backupNowBtn" type="button">Back Up Config Now</button>
+          </div>
+          <form id="backupRestoreForm" class="settings-compact-form">
+            <label>Backup File
+              <input id="backupFileInput" type="file" accept=".cajalbak,application/json" />
+            </label>
+            <button id="restoreBackupBtn" type="submit">Restore from Backup</button>
+          </form>
+          <p id="backupMsg"></p>
+        </div>
+      </section>
+      <section id="runtimeConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>10. Advanced Options (Ports)</span></button>
+        <div class="settings-content">
+          <form id="runtimeConfigForm" class="settings-compact-form settings-ports-form">
+            <input name="syslogUdpPort" type="number" min="1" max="65535" placeholder="Syslog UDP Port" />
+            <input name="syslogTcpPort" type="number" min="1" max="65535" placeholder="Syslog TCP Port" />
+            <input name="netflowPort" type="number" min="1" max="65535" placeholder="NetFlow Port" />
+            <input name="snmpPollIntervalMs" type="number" min="1000" placeholder="SNMP Poll Interval (ms)" />
+            <input name="flowTimeoutMs" type="number" min="1000" placeholder="Flow Timeout (ms)" />
+            <input name="pingIntervalMs" type="number" min="1000" placeholder="Ping Interval (ms)" />
+            <input name="globalDataRefreshMs" type="number" min="10000" placeholder="Global Data Refresh (ms)" />
+            <input name="wanTestIntervalMs" type="number" min="1000" placeholder="WAN Test Interval (ms)" />
+            <label class="runtime-toggle-label">
+              <input name="localTotpEnabled" type="checkbox" />
+              Enable Local TOTP MFA
+            </label>
+            <button type="submit">Save Advanced Settings</button>
+          </form>
+          <div class="settings-actions runtime-factory-actions">
+            <button id="factoryResetBtn" type="button" class="meta-delete">Factory Reset for Deployment</button>
+          </div>
+          <p class="runtime-factory-hint">Wipes all sites, devices, users, tokens, logs, and saved settings back to deployment baseline. You will be signed out.</p>
+          <p id="runtimeConfigMsg"></p>
+        </div>
+      </section>
+      <section id="errorLogPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>11. Error Logs</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <label class="settings-inline-label">Lines
+              <input id="errorLogLimitInput" type="number" min="1" max="1000" value="250" />
+            </label>
+            <button id="refreshErrorLogBtn" type="button" class="ghost-btn">Refresh Error Logs</button>
+          </div>
+          <pre id="errorLogViewer" class="settings-log-viewer">No error logs loaded yet.</pre>
+          <p id="errorLogMsg"></p>
+        </div>
+      </section>
+      <section id="diagnosticsPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>12. Diagnostics Console</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <label class="settings-inline-label">Lines
+              <input id="diagnosticsLogLimitInput" type="number" min="1" max="2000" value="400" />
+            </label>
+            <label class="settings-inline-label">Protocol
+              <select id="diagnosticsProtocolFilter">
+                <option value="">All</option>
+                <option value="syslog">SYSLOG</option>
+                <option value="snmp">SNMP</option>
+                <option value="netflow">NETFLOW</option>
+              </select>
+            </label>
+            <label class="settings-inline-label">Level
+              <select id="diagnosticsLevelFilter">
+                <option value="">All</option>
+                <option value="info">INFO</option>
+                <option value="warn">WARN</option>
+                <option value="error">ERROR</option>
+                <option value="debug">DEBUG</option>
+              </select>
+            </label>
+            <label class="settings-inline-label">Site
+              <input id="diagnosticsSiteFilter" type="text" placeholder="site id/name" />
+            </label>
+            <button id="refreshDiagnosticsBtn" type="button" class="ghost-btn">Refresh Diagnostics</button>
+            <button id="openDiagnosticsConsoleBtn" type="button" class="ghost-btn">Pop Out Console</button>
+            <button id="clearDiagnosticsBtn" type="button" class="ghost-btn">Clear</button>
+          </div>
+          <pre id="diagnosticsLogViewer" class="settings-log-viewer">No diagnostics logs loaded yet.</pre>
+          <p id="diagnosticsLogMsg"></p>
+        </div>
+      </section>
+      <section id="rawTelemetryPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>13. Raw Telemetry Stream</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <label class="settings-inline-label">Lines
+              <input id="rawTelemetryLimitInput" type="number" min="1" max="5000" value="1000" />
+            </label>
+            <label class="settings-inline-label">Protocol
+              <select id="rawTelemetryProtocolFilter">
+                <option value="">All</option>
+                <option value="syslog">SYSLOG</option>
+                <option value="snmp">SNMP</option>
+                <option value="netflow">NETFLOW</option>
+              </select>
+            </label>
+            <label class="settings-inline-label">Site
+              <input id="rawTelemetrySiteFilter" type="text" placeholder="site id/name" />
+            </label>
+            <label class="settings-inline-label">Search
+              <input id="rawTelemetrySearchFilter" type="text" placeholder="message text" />
+            </label>
+            <label class="settings-inline-label">Auto
+              <input id="rawTelemetryAutoRefresh" type="checkbox" checked />
+            </label>
+            <button id="refreshRawTelemetryBtn" type="button" class="ghost-btn">Refresh Stream</button>
+            <button id="openRawTelemetryConsoleBtn" type="button" class="ghost-btn">Pop Out Stream</button>
+            <button id="clearRawTelemetryBtn" type="button" class="ghost-btn">Clear</button>
+          </div>
+          <pre id="rawTelemetryViewer" class="settings-log-viewer">No raw telemetry loaded yet.</pre>
+          <p id="rawTelemetryMsg"></p>
+        </div>
+      </section>
+      <section id="firewallCheckerPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>14. Local Firewall Checker</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <button id="refreshFirewallCheckerBtn" type="button" class="ghost-btn">Run Firewall Check</button>
+          </div>
+          <pre id="firewallCheckerViewer" class="settings-log-viewer">No firewall check run yet.</pre>
+          <p id="firewallCheckerMsg"></p>
+        </div>
+      </section>
+      <section id="storagePanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>15. Storage</span></button>
+        <div class="settings-content">
+          <div class="settings-actions">
+            <button id="refreshStorageBtn" type="button" class="ghost-btn">Refresh Storage</button>
+            <button id="purgeStorageLogsBtn" type="button" class="ghost-btn">Purge Logs</button>
+          </div>
+          <div id="storageSummaryContent" class="system-health-grid"></div>
+          <pre id="storageViewer" class="settings-log-viewer">No storage summary loaded yet.</pre>
+          <p id="storageMsg"></p>
+        </div>
+      </section>
+      <section id="apiAccessPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>16. API</span></button>
+        <div class="settings-content">
+          <form id="apiTokenForm" class="settings-compact-form api-token-form">
+            <label>Name
+              <input id="apiTokenNameInput" type="text" name="name" maxlength="80" placeholder="Automation token" />
+            </label>
+            <label>Role
+              <select id="apiTokenRoleInput" name="role">
+                <option value="monitor">Monitor</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <label>Expires At (optional)
+              <input id="apiTokenExpiresInput" type="datetime-local" name="expiresAt" />
+            </label>
+            <button id="apiTokenCreateBtn" type="submit">Create Token</button>
+          </form>
+          <p class="webhook-routing-help">Use header: <code>Authorization: Bearer &lt;token&gt;</code></p>
+          <div id="apiTokenReveal" class="api-token-reveal" hidden>
+            <p class="api-token-reveal-title">Copy now. This token is shown once.</p>
+            <code id="apiTokenRevealValue" class="api-token-reveal-value"></code>
+            <div class="settings-actions">
+              <button id="apiTokenCopyBtn" type="button" class="ghost-btn">Copy Token</button>
+            </div>
+          </div>
+          <div id="apiTokenList" class="api-token-list">
+            <p class="empty">No API tokens yet.</p>
+          </div>
+          <div class="settings-subblock">
+            <h4>Windows Agent .exe Package</h4>
+            <form id="windowsAgentPackageForm" class="settings-compact-form api-token-form">
+              <label>Executable
+                <input id="windowsAgentPackageFile" type="file" accept=".exe,application/octet-stream" />
+              </label>
+              <button id="windowsAgentPackageUploadBtn" type="submit">Upload .exe</button>
+              <button id="windowsAgentPackageDeleteBtn" type="button" class="ghost-btn">Remove Upload</button>
+            </form>
+            <p class="webhook-routing-help">Used by Windows collector enrollment when requesting <code>/api/agent/windows/download?format=exe</code>.</p>
+            <p id="windowsAgentPackageMsg"></p>
+          </div>
+          <p id="apiTokenMsg"></p>
+        </div>
+      </section>
+      <section id="mySecurityPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+        <button type="button" class="settings-toggle"><span>My Security</span></button>
+        <div class="settings-content">
+          <p>Reset your own TOTP enrollment. You will re-enroll at next local login.</p>
+          <div class="settings-actions">
+            <button id="resetOwnTotpBtn" type="button">Reset My TOTP</button>
+          </div>
+          <p id="mySecurityMsg"></p>
+        </div>
+      </section>
+    </section>
+    <main class="layout">
+      <section class="panel company-name-panel">
+        <div class="company-name-wrap">
+          <p class="company-name-label">Organization Name</p>
+          <h2 id="companyNameDisplay">Four Square Health Care</h2>
+        </div>
+        <div id="serverSelfMonitor" class="server-self-monitor admin-only" hidden>
+          <p class="server-self-monitor-title">CAJAL Server Self Monitor</p>
+          <div id="serverSelfMonitorBadges" class="server-self-monitor-badges" aria-live="polite">
+            <span class="server-health-badge pending">Health Check: Loading</span>
+          </div>
+        </div>
+        <div class="company-alert-controls">
+          <button id="eventViewerBtn" type="button" class="ghost-btn">Event Viewer</button>
+          <button id="silenceAlertsBtn" type="button" class="ghost-btn admin-only" hidden>Silence 15m</button>
+          <button id="globalUndoBtn" type="button" class="ghost-btn admin-only" hidden>Undo (0)</button>
+          <span id="silenceAlertsCountdown" class="silence-countdown" hidden>Alerting muted 15:00</span>
+        </div>
+      </section>
+      <section id="eventPanel" class="panel event-panel" hidden>
+        <div class="panel-head panel-head-row">
+          <h2>Event Viewer</h2>
+          <div class="panel-actions">
+            <button id="eventViewerClose" type="button" class="ghost-btn">Close</button>
+            <label class="customer-filter-label">Search
+              <input id="eventSearchInput" type="search" placeholder="Filter events..." />
+            </label>
+            <label class="customer-filter-label">Class
+              <select id="eventClassFilter">
+                <option value="">All</option>
+              </select>
+            </label>
+            <label class="customer-filter-label">Source
+              <select id="eventSourceFilter">
+                <option value="">All</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <pre id="eventViewerLog" class="event-log"></pre>
+      </section>
+      <div id="locationPanels"></div>
+
+      <section class="panel page-actions">
+        <button id="addLocationBtn" type="button" class="admin-only" hidden>Add Location</button>
+      </section>
+    </main>
+    <footer class="app-footer">
+      <span class="app-footer-text">
+        Developed and powered by
+        <a href="https://sentineledgesolutions.com" target="_blank" rel="noopener noreferrer">Sentinel Edge AI Dev Ops</a>
+      </span>
+      <button id="roadmapBtn" type="button" class="app-footer-roadmap-btn">Roadmap</button>
+    </footer>
+
+    <dialog id="roadmapDialog" class="local-auth-dialog roadmap-dialog">
+      <form method="dialog" class="local-auth-form roadmap-form">
+        <h3>Roadmap</h3>
+        <p>Planned changes:</p>
+        <ul class="roadmap-list">
+          <li>SWITCH &amp; AP card</li>
+          <li>LDAP Integration</li>
+          <li>Better use of white space</li>
+        </ul>
+        <div class="local-auth-actions">
+          <button id="roadmapClose" type="button" class="ghost-btn">Close</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="localAuthDialog" class="local-auth-dialog">
+      <form id="localAuthForm" method="dialog" class="local-auth-form">
+        <h3 id="localAuthTitle">Local Login</h3>
+        <p id="localAuthMsg">Enter your local account credentials.</p>
+        <label>Email <input id="localAuthEmail" name="email" type="email" autocomplete="username" required /></label>
+        <label id="localAuthPasswordWrap">Password <input id="localAuthPassword" name="password" type="password" autocomplete="current-password" /></label>
+        <label id="localAuthTotpWrap" hidden>TOTP Code <input id="localAuthTotp" name="totp" inputmode="numeric" maxlength="6" placeholder="123456" /></label>
+        <div id="localAuthQrWrap" class="local-auth-qr" hidden>
+          <img id="localAuthQrImage" alt="TOTP QR code" />
+          <code id="localAuthSecret"></code>
+        </div>
+        <div class="local-auth-actions">
+          <button id="localAuthSubmit" type="submit">Continue</button>
+          <button id="localAuthCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="addLocationDialog" class="local-auth-dialog">
+      <form id="addLocationForm" method="dialog" class="local-auth-form">
+        <h3>Add Location</h3>
+        <p>Create a new location section entry.</p>
+        <label>Location Name
+          <input id="addLocationName" name="name" type="text" placeholder="Branch Office" required />
+        </label>
+        <label>Location Group
+          <input id="addLocationGroup" name="category" type="text" value="new section" disabled />
+        </label>
+        <div class="local-auth-actions">
+          <button id="addLocationSubmit" type="submit">Add Location</button>
+          <button id="addLocationCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="addDeviceDialog" class="local-auth-dialog">
+      <form id="addDeviceForm" method="dialog" class="local-auth-form">
+        <h3>Add Device</h3>
+        <p id="addDeviceMsg">Create a new device in this location.</p>
+        <label>Device Name
+          <input id="addDeviceName" name="name" type="text" placeholder="New Device" required />
+        </label>
+        <label>Device Type
+          <select id="addDeviceType" name="type">
+            <option value="firewall">Firewall</option>
+            <option value="collector">Collector</option>
+          </select>
+        </label>
+        <div class="local-auth-actions">
+          <button id="addDeviceSubmit" type="submit">Add Device</button>
+          <button id="addDeviceCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="locationPingDialog" class="local-auth-dialog">
+      <form id="locationPingForm" method="dialog" class="local-auth-form">
+        <h3 id="locationPingTitle">Add Ping Monitor</h3>
+        <p id="locationPingMsg">Set an IP address. Name is optional.</p>
+        <label>IP Address
+          <input id="locationPingTargetInput" type="text" placeholder="8.8.8.8" maxlength="255" required />
+        </label>
+        <label>Name (Optional)
+          <input id="locationPingNameInput" type="text" placeholder="ISP Gateway" maxlength="48" />
+        </label>
+        <div class="local-auth-actions">
+          <button id="locationPingSubmit" type="submit">Add Ping Monitor</button>
+          <button id="locationPingDelete" type="button" class="meta-delete" hidden>Delete Monitor</button>
+          <button id="locationPingCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deleteDeviceDialog" class="local-auth-dialog">
+      <form id="deleteDeviceForm" method="dialog" class="local-auth-form">
+        <h3>Delete Device</h3>
+        <p id="deleteDeviceMsg">Delete this device?</p>
+        <div class="local-auth-actions">
+          <button id="deleteDeviceConfirm" type="submit">Delete</button>
+          <button id="deleteDeviceCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deleteUserDialog" class="local-auth-dialog">
+      <form id="deleteUserForm" method="dialog" class="local-auth-form">
+        <h3>Delete User</h3>
+        <p id="deleteUserMsg">Delete this user?</p>
+        <div class="local-auth-actions">
+          <button id="deleteUserConfirm" type="submit">Delete</button>
+          <button id="deleteUserCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="backupPasswordDialog" class="local-auth-dialog">
+      <form id="backupPasswordForm" method="dialog" class="local-auth-form">
+        <h3 id="backupPasswordTitle">Backup Password</h3>
+        <p id="backupPasswordMsg">Enter password.</p>
+        <label>Password
+          <input id="backupPasswordInput" type="password" autocomplete="new-password" required />
+        </label>
+        <div class="local-auth-actions">
+          <button id="backupPasswordSubmit" type="submit">Continue</button>
+          <button id="backupPasswordCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmActionDialog" class="local-auth-dialog">
+      <form id="confirmActionForm" method="dialog" class="local-auth-form">
+        <h3 id="confirmActionTitle">Are You Sure?</h3>
+        <p id="confirmActionMsg">Please confirm this action.</p>
+        <div class="local-auth-actions">
+          <button id="confirmActionConfirm" type="submit" class="meta-delete">Confirm</button>
+          <button id="confirmActionCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="internalDnsDialog" class="local-auth-dialog">
+      <form id="internalDnsForm" method="dialog" class="local-auth-form">
+        <h3>Internal DNS</h3>
+        <p id="internalDnsMsg">Set internal DNS target (IP or hostname).</p>
+        <label>Target
+          <input id="internalDnsTargetInput" type="text" placeholder="192.168.1.1 or dns.local" maxlength="255" />
+        </label>
+        <div class="local-auth-actions">
+          <button id="internalDnsSave" type="submit">Save</button>
+          <button id="internalDnsCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="linuxAgentDialog" class="local-auth-dialog">
+      <form id="linuxAgentForm" method="dialog" class="local-auth-form">
+        <h3 id="linuxAgentTitle">Linux Agent Setup</h3>
+        <p id="linuxAgentMsg">Set agent auth password and Cajal URL for collector install.</p>
+        <label>Collector Site ID
+          <input id="linuxAgentSiteInput" type="text" maxlength="255" readonly />
+        </label>
+        <label>Cajal URL (reachable by collector host)
+          <input id="linuxAgentServerInput" type="text" placeholder="http://192.168.1.121:4000" maxlength="255" required />
+        </label>
+        <label>Agent Password
+          <input id="linuxAgentPasswordInput" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
+        </label>
+        <label>Confirm Agent Password
+          <input id="linuxAgentConfirmInput" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
+        </label>
+        <div class="local-auth-actions">
+          <button id="linuxAgentSubmit" type="submit">Download Linux Agent</button>
+          <button id="linuxAgentCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="diagnosticConsoleDialog" class="diagnostic-console-dialog">
+      <form method="dialog" class="diagnostic-console-form">
+        <div class="diagnostic-console-head">
+          <h3>Diagnostics Console</h3>
+          <button id="diagnosticConsoleClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <p>Tools stream for protocol traces and preflight checks.</p>
+        <pre id="diagnosticConsoleOutput" class="settings-log-viewer diagnostics-console-viewer">No diagnostics logs loaded yet.</pre>
+      </form>
+    </dialog>
+
+    <dialog id="rawTelemetryConsoleDialog" class="diagnostic-console-dialog">
+      <form method="dialog" class="diagnostic-console-form">
+        <div class="diagnostic-console-head">
+          <h3>Raw Telemetry Stream</h3>
+          <button id="rawTelemetryConsoleClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <p>Live high-volume telemetry lines captured by Cajal.</p>
+        <pre id="rawTelemetryConsoleOutput" class="settings-log-viewer diagnostics-console-viewer">No raw telemetry loaded yet.</pre>
+      </form>
+    </dialog>
+
+    <dialog id="netflowTroublemakersDialog" class="diagnostic-console-dialog">
+      <form method="dialog" class="diagnostic-console-form">
+        <div class="diagnostic-console-head">
+          <h3>NetFlow Trouble Makers</h3>
+          <button id="netflowTroublemakersClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <p>Top 10% of usage devices over the last 7 days.</p>
+        <div id="netflowTroublemakersOutput" class="netflow-troublemakers-view">
+          <p class="troublemakers-empty">No report loaded yet.</p>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <dialog id="welcomeDialog" class="local-auth-dialog welcome-dialog">
+      <form method="dialog" class="local-auth-form welcome-form">
+        <h3>Welcome to Cajal ICBM</h3>
+        <p class="welcome-tagline">Internal Connectivity &amp; Bandwidth Monitor</p>
+        <p class="welcome-body">Monitor your edge devices, track WAN health, collect syslog and NetFlow telemetry, and receive instant alerts when something goes wrong.</p>
+        <p class="welcome-hint">You may want to start here:</p>
+        <div class="local-auth-actions">
+          <button id="welcomeHelpBtn" type="button">Open Help Guide</button>
+          <button id="welcomeDismissBtn" type="button" class="ghost-btn">Got it</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

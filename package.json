@@ -1,0 +1,25 @@
+{
+  "name": "cajal",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Cajal ICBM web-based connectivity and bandwidth monitor",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "docker:reload": "bash ./docker-reload.sh fast",
+    "docker:rebuild": "bash ./docker-reload.sh rebuild",
+    "cajal:connect-test": "python3 ./agent/cajal-connect-test.py",
+    "test": "npm run test:node && npm run test:python",
+    "test:node": "node --test --test-concurrency=1 tests/*.test.js",
+    "test:python": "python3 -m unittest discover -s tests -p \"*_test.py\"",
+    "test:e2e": "npx --yes playwright@1.52.0 test -c tests/e2e/playwright.config.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.13.3",
+    "qrcode": "^1.5.4"
+  }
+}

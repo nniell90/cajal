@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cajal-postgres
+    environment:
+      POSTGRES_DB: ${CAJAL_DB_NAME:?set CAJAL_DB_NAME in .env}
+      POSTGRES_USER: ${CAJAL_DB_USER:?set CAJAL_DB_USER in .env}
+      POSTGRES_PASSWORD: ${CAJAL_DB_PASSWORD:?set CAJAL_DB_PASSWORD in .env}
+    volumes:
+      - cajal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  cajal:
+    build: .
+    container_name: cajal-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      CAJAL_DATABASE_URL: ${CAJAL_DATABASE_URL:?set CAJAL_DATABASE_URL in .env}
+      CAJAL_DATABASE_SSL: ${CAJAL_DATABASE_SSL:-verify-full}
+      CAJAL_CONFIG_KEY: ${CAJAL_CONFIG_KEY:?set in .env}
+      CAJAL_TEAMS_WEBHOOK_URL: ${CAJAL_TEAMS_WEBHOOK_URL:-}
+      CAJAL_TEAMS_WEBHOOK_TIMEOUT_MS: ${CAJAL_TEAMS_WEBHOOK_TIMEOUT_MS:-8000}
+      # Optional Teams webhook for notifications:
+      # CAJAL_TEAMS_WEBHOOK_URL: https://outlook.office.com/webhook/...
+    ports:
+      - "4000:4000"
+      - "5514:5514/udp"
+      - "5514:5514/tcp"
+      - "2055:2055/udp"
+    restart: unless-stopped
+
+volumes:
+  cajal-postgres-data:

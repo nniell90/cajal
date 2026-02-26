@@ -1,0 +1,23 @@
+# Environment — never commit real credentials
+.env
+
+# Claude Code session memory (local dev tool state)
+.claude/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files with live state
+data/*.json
+data/*.jsonl
+
+# Build / OS artifacts
+.DS_Store
+*.swp
+*.swo

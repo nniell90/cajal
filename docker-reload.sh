@@ -41,7 +41,8 @@ detect_compose() {
     echo "docker compose"
     return
   fi
-  if command -v docker-compose >/dev/null 2>&1; then
+  # Test that docker-compose actually runs (v1 crashes on Python 3.12+)
+  if docker-compose version >/dev/null 2>&1; then
     echo "docker-compose"
     return
   fi

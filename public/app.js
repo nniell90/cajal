@@ -4859,7 +4859,15 @@ function siteTile(site) {
                 aria-label="Show collector details for ${escapeHtml(site.name)}"
               >DETAILS</button>
               `
-                  : ''}<span class="flow ${notifications.enabled ? 'on' : 'off'}">Teams ${notifications.enabled ? 'On' : 'Off'}</span>`}
+                  : ''}
+              <button
+                type="button"
+                class="flow flow-btn notify-toggle ${notifications.enabled ? 'enabled' : 'disabled'}"
+                data-site-id="${escapeHtml(site.id)}"
+                aria-label="Toggle Teams notifications for ${escapeHtml(site.name)}"
+              >
+                Teams ${notifications.enabled ? 'ON' : 'OFF'}
+              </button>`}
             </div>
             ${notifyEditable
               ? `

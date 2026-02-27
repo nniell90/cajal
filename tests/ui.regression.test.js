@@ -11,7 +11,7 @@ function readFile(relativePath) {
 
 test('header keeps version + patch notes affordance wired to help anchor', () => {
   const html = readFile('public/index.html');
-  assert.match(html, /class="version-label-inline">Version 1\.1</);
+  assert.match(html, /class="version-label-inline">Version 1\.3</);
   assert.match(html, /class="version-patch-badge" data-help-section="patch-notes">Patch Notes</);
 });
 

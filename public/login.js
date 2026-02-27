@@ -235,8 +235,11 @@ registerDialog?.addEventListener('close', () => {
 });
 
 registerQrImage?.addEventListener('error', () => {
-  if (registerMsg) {
-    registerMsg.textContent = 'Unable to render QR image. Check server logs and try again.';
+  // Only show the error when the QR image is actually visible (TOTP enrollment stage)
+  if (registerQrWrap && !registerQrWrap.hidden && registerQrImage?.src) {
+    if (registerMsg) {
+      registerMsg.textContent = 'Unable to render QR image. Check server logs and try again.';
+    }
   }
 });
 

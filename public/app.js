@@ -265,7 +265,7 @@ let ssoConfigState = {};
 let runtimeConfigState = {};
 let sslConfigState = {};
 let locationSettingsState = {
-  companyName: 'Four Square Health Care',
+  companyName: 'My Organization',
   internalName: 'Location 1',
   customerName: 'Location 2',
   sections: [
@@ -1408,7 +1408,7 @@ function normalizeLocationSettings(config = {}) {
   ];
   const normalizedSections = sections.length ? sections : fallbackSections;
   return {
-    companyName: String(config.companyName || 'Four Square Health Care').trim() || 'Four Square Health Care',
+    companyName: String(config.companyName || 'My Organization').trim() || 'My Organization',
     internalName: String(config.internalName || normalizedSections[0]?.name || 'Location 1').trim() || 'Location 1',
     customerName: String(config.customerName || normalizedSections[1]?.name || 'Location 2').trim() || 'Location 2',
     sections: normalizedSections

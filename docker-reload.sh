@@ -89,12 +89,18 @@ ensure_env() {
     db_pass="$new_pass"
   fi
 
-  # ── Warn about Watchtower token ───────────────────────────────────────────
+  # ── Auto-generate CAJAL_WATCHTOWER_TOKEN if missing or default ────────────
   local wt_token
   wt_token="$(grep -E '^CAJAL_WATCHTOWER_TOKEN=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
   if [ -z "$wt_token" ] || [ "$wt_token" = "changeme" ]; then
-    echo "WARNING: CAJAL_WATCHTOWER_TOKEN is not set or is using the default 'changeme' value."
-    echo "         Set a strong token in .env before exposing the update API in production."
+    local new_wt_token
+    new_wt_token="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")"
+    if grep -q '^CAJAL_WATCHTOWER_TOKEN=' .env; then
+      sed -i "s|^CAJAL_WATCHTOWER_TOKEN=.*|CAJAL_WATCHTOWER_TOKEN=${new_wt_token}|" .env
+    else
+      echo "CAJAL_WATCHTOWER_TOKEN=${new_wt_token}" >> .env
+    fi
+    echo "INFO: CAJAL_WATCHTOWER_TOKEN auto-generated and saved to .env"
   fi
 }
 
@@ -169,7 +175,6 @@ run_socket_proxy_container() {
 run_watchtower_container() {
   local token
   token="$(grep -E '^CAJAL_WATCHTOWER_TOKEN=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
-  token="${token:-changeme}"
 
   docker rm -f "$WATCHTOWER_CONTAINER" 2>/dev/null || true
   docker run -d \

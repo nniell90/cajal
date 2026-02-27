@@ -5104,7 +5104,7 @@ async function initialize() {
     await loadAuthState();
     if (!authState?.user?.authenticated) {
       window.location.replace('/login.html');
-      return;
+      return; // Don't schedule refresh — we're leaving the page
     }
     // Fetch version from the public health endpoint (non-fatal if it fails)
     try {
@@ -5122,7 +5122,8 @@ async function initialize() {
     await loadDashboard();
   } catch (err) {
     setNotice(err.message);
-  } finally {
+  }
+  if (authState?.user?.authenticated) {
     scheduleAutoRefresh();
   }
 }

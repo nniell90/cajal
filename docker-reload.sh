@@ -49,14 +49,47 @@ detect_compose() {
 }
 
 ensure_env() {
+  # ── Create .env from example if missing ───────────────────────────────────
   if [ ! -f .env ]; then
-    echo ".env file is missing. Add CAJAL_CONFIG_KEY before running."
-    exit 1
+    if [ -f .env.example ]; then
+      cp .env.example .env
+      echo "INFO: .env created from .env.example"
+    else
+      echo "ERROR: .env file is missing and no .env.example found."
+      exit 1
+    fi
   fi
-  if ! grep -q '^CAJAL_CONFIG_KEY=' .env; then
-    echo "CAJAL_CONFIG_KEY is missing from .env"
-    exit 1
+
+  # ── Auto-generate CAJAL_CONFIG_KEY if missing or default ──────────────────
+  local config_key
+  config_key="$(grep -E '^CAJAL_CONFIG_KEY=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
+  if [ -z "$config_key" ] || echo "$config_key" | grep -qi 'change_me\|CHANGE_ME'; then
+    local new_key
+    new_key="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")"
+    if grep -q '^CAJAL_CONFIG_KEY=' .env; then
+      sed -i "s|^CAJAL_CONFIG_KEY=.*|CAJAL_CONFIG_KEY=${new_key}|" .env
+    else
+      echo "CAJAL_CONFIG_KEY=${new_key}" >> .env
+    fi
+    echo "INFO: CAJAL_CONFIG_KEY auto-generated and saved to .env"
   fi
+
+  # ── Auto-generate CAJAL_DB_PASSWORD if missing or default ─────────────────
+  local db_pass
+  db_pass="$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
+  if [ -z "$db_pass" ] || echo "$db_pass" | grep -qi 'change_me\|CHANGE_ME'; then
+    local new_pass
+    new_pass="$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")"
+    if grep -q '^CAJAL_DB_PASSWORD=' .env; then
+      sed -i "s|^CAJAL_DB_PASSWORD=.*|CAJAL_DB_PASSWORD=${new_pass}|" .env
+    else
+      echo "CAJAL_DB_PASSWORD=${new_pass}" >> .env
+    fi
+    echo "INFO: CAJAL_DB_PASSWORD auto-generated and saved to .env"
+    db_pass="$new_pass"
+  fi
+
+  # ── Warn about Watchtower token ───────────────────────────────────────────
   local wt_token
   wt_token="$(grep -E '^CAJAL_WATCHTOWER_TOKEN=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
   if [ -z "$wt_token" ] || [ "$wt_token" = "changeme" ]; then
@@ -78,13 +111,17 @@ ensure_postgres_container() {
     return
   fi
 
+  local db_pass
+  db_pass="$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
+  db_pass="${db_pass:-cajal}"
+
   docker run -d \
     --name "$DB_CONTAINER" \
     --network "$NETWORK_NAME" \
     --restart unless-stopped \
     -e POSTGRES_DB=cajal \
     -e POSTGRES_USER=cajal \
-    -e POSTGRES_PASSWORD=cajal \
+    -e POSTGRES_PASSWORD="$db_pass" \
     -v "$DB_VOLUME:/var/lib/postgresql/data" \
     --health-cmd "pg_isready -U cajal -d cajal" \
     --health-interval 5s \
@@ -103,7 +140,7 @@ run_app_container() {
     --env-file .env \
     -e PORT=4000 \
     -e CAJAL_STORAGE_BACKEND=postgres \
-    -e CAJAL_DATABASE_URL=postgresql://cajal:cajal@"$DB_CONTAINER":5432/cajal \
+    -e CAJAL_DATABASE_URL=postgresql://cajal:"$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || echo cajal)"@"$DB_CONTAINER":5432/cajal \
     -e CAJAL_DATABASE_SSL=disable \
     -p 4000:4000 \
     -p 5514:5514/udp \

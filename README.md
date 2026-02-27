@@ -152,6 +152,7 @@ Tracked datasets:
 - `ssl`
 - `backupMeta`
 - `apiTokens`
+- `windowsAgentPackage`
 
 At startup, Cajal performs a one-time import from existing local `data/*` tracked files into `cajal_store` for keys that are not already present.
 
@@ -218,7 +219,7 @@ Set encryption key:
 export CAJAL_CONFIG_KEY='replace-with-strong-random-secret'
 ```
 
-Or persist it in `auvik-lite/.env`:
+Or persist it in your project `.env`:
 
 ```bash
 CAJAL_CONFIG_KEY=replace-with-strong-random-secret
@@ -237,7 +238,7 @@ Open:
 
 ### 5.3 Docker quick start (recommended)
 
-From `auvik-lite/`:
+From the project root (`cajal/`):
 
 ```bash
 bash docker-reload.sh rebuild

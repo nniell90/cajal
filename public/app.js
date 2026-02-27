@@ -5532,7 +5532,6 @@ localAuthForm?.addEventListener('submit', async (event) => {
         return;
       }
       throw new Error('Unexpected setup response from server.');
-      return;
     }
 
     if (localAuthFlow.stage === 'enroll_totp') {

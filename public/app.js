@@ -148,6 +148,15 @@ const roadmapClose = document.getElementById('roadmapClose');
 const welcomeDialog = document.getElementById('welcomeDialog');
 const welcomeHelpBtn = document.getElementById('welcomeHelpBtn');
 const welcomeDismissBtn = document.getElementById('welcomeDismissBtn');
+const setupWizardDialog = document.getElementById('setupWizardDialog');
+const wizardStep1 = document.getElementById('wizardStep1');
+const wizardStep2 = document.getElementById('wizardStep2');
+const wizardOrgName = document.getElementById('wizardOrgName');
+const wizardStep1Next = document.getElementById('wizardStep1Next');
+const wizardSkipAll = document.getElementById('wizardSkipAll');
+const wizardSummary = document.getElementById('wizardSummary');
+const wizardFinish = document.getElementById('wizardFinish');
+const wizardGoSettings = document.getElementById('wizardGoSettings');
 const versionCheckSection = document.getElementById('versionCheckSection');
 const auditRefreshBtn = document.getElementById('auditRefreshBtn');
 const auditCloseBtn = document.getElementById('auditCloseBtn');
@@ -205,6 +214,8 @@ const confirmActionTitle = document.getElementById('confirmActionTitle');
 const confirmActionMsg = document.getElementById('confirmActionMsg');
 const confirmActionConfirm = document.getElementById('confirmActionConfirm');
 const confirmActionCancel = document.getElementById('confirmActionCancel');
+const confirmTypeToConfirmWrap = document.getElementById('confirmTypeToConfirmWrap');
+const confirmTypeToConfirmInput = document.getElementById('confirmTypeToConfirmInput');
 const internalDnsDialog = document.getElementById('internalDnsDialog');
 const internalDnsForm = document.getElementById('internalDnsForm');
 const internalDnsTargetInput = document.getElementById('internalDnsTargetInput');
@@ -291,6 +302,7 @@ let backupPasswordResolve = null;
 let backupPasswordSubmitted = false;
 let confirmActionResolve = null;
 let confirmActionSubmitted = false;
+let confirmActionRequiredPhrase = '';
 let linuxAgentSetupResolve = null;
 let linuxAgentSetupSubmitted = false;
 let systemStartedAtMs = Date.now();
@@ -1259,7 +1271,7 @@ function askBackupPassword({ title, message } = {}) {
   });
 }
 
-function askActionConfirm({ title, message, confirmLabel, cancelLabel, dangerous } = {}) {
+function askActionConfirm({ title, message, confirmLabel, cancelLabel, dangerous, typeToConfirm } = {}) {
   return new Promise((resolve) => {
     if (!confirmActionDialog || !confirmActionForm || !confirmActionConfirm || !confirmActionCancel) {
       resolve(false);
@@ -1270,6 +1282,13 @@ function askActionConfirm({ title, message, confirmLabel, cancelLabel, dangerous
     confirmActionConfirm.textContent = String(confirmLabel || 'Confirm');
     confirmActionCancel.textContent = String(cancelLabel || 'Cancel');
     confirmActionConfirm.classList.toggle('meta-delete', Boolean(dangerous));
+    confirmActionRequiredPhrase = String(typeToConfirm || '');
+    if (confirmTypeToConfirmWrap) confirmTypeToConfirmWrap.hidden = !typeToConfirm;
+    if (confirmTypeToConfirmInput) {
+      confirmTypeToConfirmInput.value = '';
+      confirmTypeToConfirmInput.placeholder = typeToConfirm ? `Type "${typeToConfirm}" to confirm` : '';
+    }
+    confirmActionConfirm.disabled = Boolean(typeToConfirm);
     confirmActionSubmitted = false;
     confirmActionResolve = resolve;
     if (typeof confirmActionDialog.showModal === 'function') {
@@ -3517,13 +3536,16 @@ async function triggerFactoryResetForDeployment() {
   });
   if (!ok) return;
 
-  const phrase = window.prompt('Type FACTORY RESET to continue');
-  if (phrase == null) {
+  const confirmed = await askActionConfirm({
+    title: 'Final Confirmation',
+    message: 'Type the phrase below to authorize the factory reset.',
+    confirmLabel: 'Factory Reset',
+    cancelLabel: 'Cancel',
+    dangerous: true,
+    typeToConfirm: 'FACTORY RESET'
+  });
+  if (!confirmed) {
     if (runtimeConfigMsg) runtimeConfigMsg.textContent = 'Factory reset canceled.';
-    return;
-  }
-  if (String(phrase || '').trim().toUpperCase() !== 'FACTORY RESET') {
-    if (runtimeConfigMsg) runtimeConfigMsg.textContent = 'Factory reset canceled: confirmation phrase mismatch.';
     return;
   }
 
@@ -5072,6 +5094,7 @@ async function initialize() {
     await loadAlertSilenceState();
     await loadSsoSettings();
     await loadRuntimeSettings();
+    maybeShowSetupWizard();
     await loadWebhookRoutingSettings();
     await loadSslSettings();
     await loadLocationSettings();
@@ -5452,11 +5475,21 @@ backupPasswordDialog?.addEventListener('close', () => {
   }
 });
 
+confirmTypeToConfirmInput?.addEventListener('input', () => {
+  if (!confirmActionRequiredPhrase) return;
+  confirmActionConfirm.disabled =
+    confirmTypeToConfirmInput.value.trim().toUpperCase() !== confirmActionRequiredPhrase.toUpperCase();
+});
+
 confirmActionDialog?.addEventListener('close', () => {
   if (!confirmActionSubmitted && confirmActionResolve) {
     confirmActionResolve(false);
     confirmActionResolve = null;
   }
+  if (confirmTypeToConfirmWrap) confirmTypeToConfirmWrap.hidden = true;
+  if (confirmTypeToConfirmInput) confirmTypeToConfirmInput.value = '';
+  if (confirmActionConfirm) confirmActionConfirm.disabled = false;
+  confirmActionRequiredPhrase = '';
 });
 
 linuxAgentDialog?.addEventListener('close', () => {
@@ -7573,11 +7606,70 @@ function dismissWelcomeDialog() {
 
 welcomeHelpBtn?.addEventListener('click', () => {
   dismissWelcomeDialog();
-  window.open('/help.html', '_blank');
+  window.open('/help.html', '_blank', 'noopener,noreferrer');
 });
 
 welcomeDismissBtn?.addEventListener('click', () => {
   dismissWelcomeDialog();
+});
+
+// ── Setup wizard ──────────────────────────────────────────────────────────────
+
+async function markWizardComplete() {
+  try {
+    await getJson('/api/settings/runtime', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setupWizardCompleted: true })
+    });
+  } catch {
+    // Non-fatal — wizard won't reappear if server is unreachable anyway
+  }
+}
+
+function maybeShowSetupWizard() {
+  if (!canAdmin()) return;
+  if (runtimeConfigState.setupWizardCompleted) return;
+  if (!setupWizardDialog || typeof setupWizardDialog.showModal !== 'function') return;
+  if (!setupWizardDialog.open) setupWizardDialog.showModal();
+}
+
+wizardStep1Next?.addEventListener('click', async () => {
+  const orgName = wizardOrgName?.value?.trim();
+  if (orgName) {
+    try {
+      locationSettingsState = normalizeLocationSettings(
+        await getJson('/api/settings/locations', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companyName: orgName })
+        })
+      );
+      renderLocationTitles();
+      if (wizardSummary) {
+        wizardSummary.textContent = `Organization name set to "${orgName}". You can configure notifications, alerts, and advanced options in the Settings panel at any time.`;
+      }
+    } catch {
+      // Non-fatal — proceed to step 2 regardless
+    }
+  }
+  await markWizardComplete();
+  if (wizardStep1) wizardStep1.hidden = true;
+  if (wizardStep2) wizardStep2.hidden = false;
+});
+
+wizardSkipAll?.addEventListener('click', async () => {
+  await markWizardComplete();
+  setupWizardDialog?.close();
+});
+
+wizardFinish?.addEventListener('click', () => {
+  setupWizardDialog?.close();
+});
+
+wizardGoSettings?.addEventListener('click', () => {
+  setupWizardDialog?.close();
+  if (settingsPanel) settingsPanel.hidden = false;
 });
 
 // ── Version check + update ────────────────────────────────────────────────────
@@ -7651,7 +7743,13 @@ async function checkForUpdates() {
 
 async function applyUpdate() {
   if (updateInProgress) return;
-  if (!confirm('Trigger update now?\n\nThe application will restart. Active users will be briefly disconnected (~30 seconds).')) return;
+  const ok = await askActionConfirm({
+    title: 'Apply Update',
+    message: 'The application will restart. Active users will be briefly disconnected for ~30 seconds.',
+    confirmLabel: 'Update Now',
+    cancelLabel: 'Cancel'
+  });
+  if (!ok) return;
   updateInProgress = true;
   renderVersionCheckSection(versionCheckResult, false, 'Triggering update\u2026');
   try {

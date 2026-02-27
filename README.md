@@ -12,6 +12,15 @@ This README is the canonical operator/developer guide for running and extending 
 
 ## Patch Notes {#patch-notes}
 
+- Version 1.3:
+  - Zero-config install — `bash docker-reload.sh rebuild` auto-generates all secrets on first run (no `.env` editing required)
+  - First-run setup wizard guides new admins through initial configuration on first login
+  - Update Now button visible in all installs by default (no env vars required)
+  - All destructive confirmations moved in-app — no native `confirm()` or `prompt()` dialogs
+  - Factory reset now requires typing "FACTORY RESET" in a styled in-app dialog
+  - Docker and Node.js presence validated before setup begins with clear install guidance
+  - 127 unit tests (up from 124)
+
 - Version 1.2:
   - Welcome dialog on first login with direct link to Help
   - In-app version check and one-click Update Now button (Settings → System Health)
@@ -231,14 +240,17 @@ Open:
 From `auvik-lite/`:
 
 ```bash
-cp .env.example .env
-# Edit .env — set CAJAL_CONFIG_KEY at minimum
 bash docker-reload.sh rebuild
 ```
 
+That's it. The script auto-generates all required secrets (encryption key, database
+password, Watchtower token) on first run and stores them in `.env`.
+
 Then open:
 
-- `http://localhost:4000/login.html`
+- `http://localhost:4000`
+
+The first admin account is created through the browser on first login.
 
 This starts four containers:
 

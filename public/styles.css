@@ -1565,6 +1565,26 @@ body[data-ui-theme="slate-neon"] {
   margin-bottom: 0.9rem;
 }
 
+/* ── Setup wizard ────────────────────────────────────────────────────────────── */
+.setup-wizard-dialog {
+  width: min(480px, calc(100vw - 2rem));
+}
+
+.wizard-step-indicator {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #8f999d);
+  margin: 0 0 0.3rem;
+}
+
+.wizard-body {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text);
+  margin-bottom: 1rem;
+}
+
 /* ── Version check / update section ─────────────────────────────────────────── */
 .version-check-section {
   padding: 0.6rem 0 0.8rem;

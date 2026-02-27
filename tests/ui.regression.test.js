@@ -85,14 +85,42 @@ test('app.js includes welcome dialog and version check functions', () => {
   assert.match(js, /function updateTopbarVersion/);
 });
 
-test('applyUpdate requires user confirmation before triggering restart', () => {
+test('applyUpdate uses in-app askActionConfirm before triggering restart', () => {
   const js = readFile('public/app.js');
-  // confirm() call must appear before updateInProgress = true inside applyUpdate
   const fnStart = js.indexOf('async function applyUpdate');
   assert.ok(fnStart >= 0, 'applyUpdate function not found');
-  const fnBody = js.slice(fnStart, fnStart + 400);
-  const confirmPos = fnBody.indexOf('confirm(');
+  const fnBody = js.slice(fnStart, fnStart + 500);
+  // Must use in-app dialog, not native confirm()
+  assert.ok(!fnBody.includes('window.confirm(') && !fnBody.includes('\n  if (!confirm('), 'applyUpdate must not use native confirm()');
+  const confirmPos = fnBody.indexOf('askActionConfirm(');
   const progressPos = fnBody.indexOf('updateInProgress = true');
-  assert.ok(confirmPos >= 0, 'confirm() not found in applyUpdate');
-  assert.ok(confirmPos < progressPos, 'confirm() must come before setting updateInProgress');
+  assert.ok(confirmPos >= 0, 'askActionConfirm() not found in applyUpdate');
+  assert.ok(confirmPos < progressPos, 'askActionConfirm() must come before setting updateInProgress');
+});
+
+test('factory reset does not use native window.prompt', () => {
+  const js = readFile('public/app.js');
+  const fnStart = js.indexOf('async function triggerFactoryResetForDeployment');
+  assert.ok(fnStart >= 0, 'triggerFactoryResetForDeployment function not found');
+  const fnBody = js.slice(fnStart, fnStart + 800);
+  assert.ok(!fnBody.includes('window.prompt('), 'factory reset must not use window.prompt()');
+  assert.ok(fnBody.includes('typeToConfirm'), 'factory reset must use typeToConfirm in-app dialog');
+});
+
+test('setup wizard dialog is present with correct structure', () => {
+  const html = readFile('public/index.html');
+  assert.match(html, /id="setupWizardDialog"/);
+  assert.match(html, /id="wizardStep1"/);
+  assert.match(html, /id="wizardStep2"/);
+  assert.match(html, /id="wizardOrgName"/);
+  assert.match(html, /id="wizardStep1Next"/);
+  assert.match(html, /id="wizardSkipAll"/);
+  assert.match(html, /id="wizardFinish"/);
+});
+
+test('app.js includes setup wizard functions and state', () => {
+  const js = readFile('public/app.js');
+  assert.match(js, /function maybeShowSetupWizard/);
+  assert.match(js, /function markWizardComplete/);
+  assert.match(js, /setupWizardCompleted/);
 });

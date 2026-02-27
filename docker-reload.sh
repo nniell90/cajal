@@ -49,6 +49,18 @@ detect_compose() {
 }
 
 ensure_env() {
+  # ── Verify dependencies ────────────────────────────────────────────────────
+  if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: Node.js is required for setup but was not found."
+    echo "       Install it from https://nodejs.org/ then re-run this script."
+    exit 1
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: Docker is required but was not found."
+    echo "       Install it from https://docs.docker.com/get-docker/ then re-run this script."
+    exit 1
+  fi
+
   # ── Create .env from example if missing ───────────────────────────────────
   if [ ! -f .env ]; then
     if [ -f .env.example ]; then
@@ -239,6 +251,10 @@ main() {
   esac
 
   docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  echo ""
+  echo "────────────────────────────────────────────"
+  echo "  Cajal is running → http://localhost:4000"
+  echo "────────────────────────────────────────────"
 }
 
 main

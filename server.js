@@ -199,6 +199,7 @@ const {
   verifyTotp,
   hashApiToken,
 } = require('./lib/crypto');
+const { AsyncMutex } = require('./lib/mutex');
 
 const {
   rateLimitBuckets,
@@ -646,9 +647,7 @@ const MIME_TYPES = {
 
 const defaultSiteSeeds = [
   ['site-hq', 'HQ', 'Primary office edge and core connectivity.', 'internal', 'HQ Edge Firewall', 'up', '203.0.113.12', true, ['noc@cajal.local', 'infra@cajal.local'], '2026-02-12T14:05:00.000Z', [true, 'udp', 'syslog-hq-token', '2026-02-18T15:20:00.000Z'], [true, '10.0.0.1', 'public-hq', '2026-02-16T17:10:00.000Z'], [true, 'HQ-FW-01', 'netflow-hq-secret', '2026-02-19T12:45:00.000Z'], [100, 100, 99.96, 100, 99.92, 100, 99.98, 99.95, 100, 100, 99.9, 99.97, 100, 100], '67d 04h', ['10 min ago', 942, 901, 4], ['40 min ago', 934, 887, 5]],
-  ['site-lab', 'Engineering Lab', 'R&D environment with test workloads and branch uplink.', 'internal', 'Lab Firewall', 'warn', '203.0.113.36', true, ['labops@cajal.local'], '2026-02-11T09:20:00.000Z', [true, 'tcp', 'syslog-lab-token', '2026-02-15T10:35:00.000Z'], [true, '10.0.50.1', 'public-lab', '2026-02-14T09:05:00.000Z'], [false, 'LAB-FW-01', 'netflow-lab-secret', '2026-02-13T18:50:00.000Z'], [99.2, 98.9, 99.1, 98.7, 98.4, 97.8, 98.2, 99.0, 98.6, 99.1, 98.8, 98.3, 98.9, 99.0], '11d 18h', ['8 min ago', 516, 201, 12], ['38 min ago', 492, 193, 14]],
-  ['site-chi', 'Acme Retail - Chicago', 'Retail branch with POS and camera traffic.', 'customer', 'Acme-CHI-FW', 'up', '198.51.100.44', true, ['alerts@acmeretail.example'], '2026-02-10T20:10:00.000Z', [true, 'tcp', 'syslog-acme-token', '2026-02-17T22:10:00.000Z'], [false, '10.22.1.1', 'acme-public', '2026-02-10T07:40:00.000Z'], [true, 'ACME-CHI-FW', 'netflow-acme-secret', '2026-02-18T04:30:00.000Z'], [99.7, 99.8, 99.8, 99.6, 99.9, 99.7, 99.8, 99.9, 99.6, 99.7, 99.9, 99.8, 99.9, 99.8], 'Unknown', ['6 min ago', 624, 102, 16], ['36 min ago', 601, 98, 18]],
-  ['site-dal', 'Bright Dental - Dallas', 'Dental clinic edge with intermittent WAN service.', 'customer', 'Bright-DAL-FW', 'down', '198.51.100.88', false, ['it@brightdental.example'], '2026-02-09T13:15:00.000Z', [false, 'udp', '', '2026-02-09T13:15:00.000Z'], [false, '10.40.1.1', '', '2026-02-09T13:15:00.000Z'], [false, '', '', '2026-02-09T13:15:00.000Z'], [96.4, 95.8, 94.1, 92.3, 90.6, 88.9, 84.7, 79.2, 65.1, 48.8, 30.2, 14.6, 3.5, 0], '0d 00h', ['5 min ago', 0, 0, 0], ['35 min ago', 0, 0, 0]]
+  ['site-lab', 'Engineering Lab', 'R&D environment with test workloads and branch uplink.', 'internal', 'Lab Firewall', 'warn', '203.0.113.36', true, ['labops@cajal.local'], '2026-02-11T09:20:00.000Z', [true, 'tcp', 'syslog-lab-token', '2026-02-15T10:35:00.000Z'], [true, '10.0.50.1', 'public-lab', '2026-02-14T09:05:00.000Z'], [false, 'LAB-FW-01', 'netflow-lab-secret', '2026-02-13T18:50:00.000Z'], [99.2, 98.9, 99.1, 98.7, 98.4, 97.8, 98.2, 99.0, 98.6, 99.1, 98.8, 98.3, 98.9, 99.0], '11d 18h', ['8 min ago', 516, 201, 12], ['38 min ago', 492, 193, 14]]
 ];
 
 const defaultData = {
@@ -663,6 +662,17 @@ const defaultData = {
       status: 'up',
       cpu: 46,
       memory: 61,
+      lastSeen: new Date().toISOString()
+    },
+    {
+      id: 'col-001',
+      name: 'HQ Collector',
+      type: 'Collector',
+      siteId: 'site-hq',
+      ip: '10.0.0.10',
+      status: 'up',
+      cpu: 12,
+      memory: 34,
       lastSeen: new Date().toISOString()
     }
   ]
@@ -846,7 +856,8 @@ async function loadState() {
       syslog: new Map(),
       snmp: new Map(),
       netflow: new Map()
-    }
+    },
+    stateMutex: new AsyncMutex()
   };
 }
 
@@ -1031,7 +1042,7 @@ async function main() {
   setInterval(() => {
     enforceStorageRetention(state, { persistEventsNow: true })
       .catch((err) => logSystemError('retention.enforce.interval', err));
-  }, 30 * 60 * 1000);
+  }, 10 * 60 * 1000);
 
   setInterval(() => {
     const now = Date.now();
@@ -1046,6 +1057,38 @@ async function main() {
       if (!setup || now - setup.createdAt > LOCAL_SETUP_TTL_MS) shared.localSetupState.delete(token);
     }
     pruneCollectorAgentSessions(state, now);
+
+    // ── Prune flow Maps for deleted sites ──────────────────────────────────────
+    const activeSiteIds = new Set(state.sites.map((s) => s.id));
+    for (const key of state.syslogWindows.keys()) {
+      if (!activeSiteIds.has(key)) state.syslogWindows.delete(key);
+    }
+    for (const key of state.pingState.keys()) {
+      if (!activeSiteIds.has(key)) state.pingState.delete(key);
+    }
+    for (const key of state.flowState.keys()) {
+      const siteId = key.split(':')[0];
+      if (!activeSiteIds.has(siteId)) state.flowState.delete(key);
+    }
+    const netflowCutoff = now - NETFLOW_TOP_WINDOW_MS;
+    for (const [siteId, talkers] of state.netflowTalkers.entries()) {
+      if (!activeSiteIds.has(siteId)) {
+        state.netflowTalkers.delete(siteId);
+        continue;
+      }
+      for (const [ip, series] of talkers.entries()) {
+        const recent = series.filter((s) => s.ts >= netflowCutoff);
+        if (!recent.length) talkers.delete(ip);
+        else talkers.set(ip, recent);
+      }
+    }
+    for (const protocol of ['ping', 'pingSecondary', 'syslog', 'snmp', 'netflow']) {
+      const map = state.lastSeen[protocol];
+      if (!map) continue;
+      for (const key of map.keys()) {
+        if (!activeSiteIds.has(key)) map.delete(key);
+      }
+    }
   }, 60000);
 
   const { certPem, keyPem, caPem } = shared.sslRuntimeConfig;
@@ -1055,6 +1098,9 @@ async function main() {
     // ── HTTPS mode: TLS server + plain-HTTP redirect ─────────────────────────
     const tlsOptions = { cert: certPem, key: keyPem, ...(caPem ? { ca: caPem } : {}) };
     const httpsServer = https.createServer(tlsOptions, createHttpHandler(state));
+    httpsServer.requestTimeout = 30000;
+    httpsServer.headersTimeout = 10000;
+    httpsServer.keepAliveTimeout = 5000;
 
     const redirectServer = http.createServer((req, res) => {
       const host = String(req.headers.host || '').replace(/:\d+$/, '');
@@ -1076,11 +1122,17 @@ async function main() {
   } else {
     // ── HTTP mode: no SSL cert configured yet ────────────────────────────────
     const server = http.createServer(createHttpHandler(state));
+    server.requestTimeout = 30000;
+    server.headersTimeout = 10000;
+    server.keepAliveTimeout = 5000;
     installShutdownHandlers(state, server);
     server.listen(PORT, () => {
       console.log(`Cajal running at http://localhost:${PORT} (no SSL cert configured)`);
       console.log(`Storage backend active: ${shared.storageBackendActive}`);
       console.log(telemetryLine);
+      if (!FORCE_SECURE_COOKIES) {
+        console.log('WARNING: CAJAL_FORCE_SECURE_COOKIES is not enabled. Set CAJAL_FORCE_SECURE_COOKIES=1 if behind an HTTPS reverse proxy.');
+      }
     });
   }
 }

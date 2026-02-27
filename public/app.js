@@ -230,6 +230,7 @@ const linuxAgentSiteInput = document.getElementById('linuxAgentSiteInput');
 const linuxAgentPasswordInput = document.getElementById('linuxAgentPasswordInput');
 const linuxAgentConfirmInput = document.getElementById('linuxAgentConfirmInput');
 const linuxAgentCancel = document.getElementById('linuxAgentCancel');
+const linuxAgentSubmit = document.getElementById('linuxAgentSubmit');
 const toast = document.getElementById('toast');
 const DEFAULT_AUTO_REFRESH_MS = 60 * 1000;
 const SSO_MASK = '********';
@@ -278,10 +279,9 @@ let sslConfigState = {};
 let locationSettingsState = {
   companyName: 'My Organization',
   internalName: 'Location 1',
-  customerName: 'Location 2',
+  customerName: '',
   sections: [
-    { id: 'internal', name: 'Location 1', address: '', pingMonitors: [] },
-    { id: 'customer', name: 'Location 2', address: '', pingMonitors: [] }
+    { id: 'internal', name: 'Location 1', address: '', pingMonitors: [] }
   ]
 };
 let localAuthFlow = { stage: 'login', setupToken: '', email: '' };
@@ -1320,6 +1320,7 @@ function askLinuxAgentSetup(site = null, platformLabel = 'Linux') {
     const siteId = String(site?.id || '').trim();
     const platform = String(platformLabel || 'Linux').trim() || 'Linux';
     if (linuxAgentTitle) linuxAgentTitle.textContent = `${platform} Agent Setup · ${siteName}`;
+    if (linuxAgentSubmit) linuxAgentSubmit.textContent = `Download ${platform} Agent`;
     if (linuxAgentMsg) linuxAgentMsg.textContent = `Set the agent password, then run the copied ${platform} enroll command on the collector host. Setup pre-fills server and site automatically.`;
     linuxAgentServerInput.value = normalizeAgentServerUrl(window.location.origin);
     linuxAgentSiteInput.value = siteId;
@@ -1422,14 +1423,16 @@ function normalizeLocationSettings(config = {}) {
       .filter((s) => s.id && s.name)
     : [];
   const fallbackSections = [
-    { id: 'internal', name: String(config.internalName || 'Location 1').trim() || 'Location 1', address: '', pingMonitors: [] },
-    { id: 'customer', name: String(config.customerName || 'Location 2').trim() || 'Location 2', address: '', pingMonitors: [] }
+    { id: 'internal', name: String(config.internalName || 'Location 1').trim() || 'Location 1', address: '', pingMonitors: [] }
   ];
+  if (config.customerName) {
+    fallbackSections.push({ id: 'customer', name: String(config.customerName).trim(), address: '', pingMonitors: [] });
+  }
   const normalizedSections = sections.length ? sections : fallbackSections;
   return {
     companyName: String(config.companyName || 'My Organization').trim() || 'My Organization',
     internalName: String(config.internalName || normalizedSections[0]?.name || 'Location 1').trim() || 'Location 1',
-    customerName: String(config.customerName || normalizedSections[1]?.name || 'Location 2').trim() || 'Location 2',
+    customerName: String(config.customerName || normalizedSections[1]?.name || '').trim(),
     sections: normalizedSections
   };
 }

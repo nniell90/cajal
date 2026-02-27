@@ -980,8 +980,8 @@ test('decryptBackupPayload throws on malformed backup blob', () => {
   assert.throws(() => core.decryptBackupPayload({ format: 'unknown' }, 'password'), /invalid backup file format/i);
 });
 
-test('encryptBackupPayload rejects passwords shorter than 6 chars', () => {
-  assert.throws(() => core.encryptBackupPayload({}, 'abc'), /at least 6/i);
+test('encryptBackupPayload rejects passwords shorter than 12 chars', () => {
+  assert.throws(() => core.encryptBackupPayload({}, 'short'), /at least 12/i);
 });
 
 // ── validateBackupImportPayload ────────────────────────────────────────────────
@@ -1205,4 +1205,59 @@ test('deriveSiteStatus returns up when heartbeat true and all configured protoco
     telemetry: { syslog: true }
   };
   assert.equal(core.deriveSiteStatus(state, site), 'up');
+});
+
+test('smartReadFileTail reads only the tail of large files', async () => {
+  const fs = require('node:fs');
+  const fsp = fs.promises;
+  const os = require('node:os');
+  const path = require('node:path');
+  const { smartReadFileTail } = require('../lib/storage');
+
+  const tmpFile = path.join(os.tmpdir(), `cajal-test-tail-${Date.now()}.log`);
+  try {
+    const lines = [];
+    for (let i = 0; i < 1000; i++) lines.push(JSON.stringify({ i, msg: `line-${i}` }));
+    await fsp.writeFile(tmpFile, lines.join('\n') + '\n', 'utf8');
+
+    const stats = await fsp.stat(tmpFile);
+    const smallMax = Math.floor(stats.size / 4);
+    const tail = await smartReadFileTail(tmpFile, smallMax, 'utf8');
+
+    assert.ok(tail.length < stats.size, 'tail read must be smaller than full file');
+    assert.ok(tail.length > 0, 'tail read must return some data');
+    const tailLines = tail.split('\n').filter(Boolean);
+    assert.ok(tailLines.length < 1000, 'tail must contain fewer lines than the full file');
+    assert.ok(tailLines.length > 0, 'tail must contain some lines');
+    const lastParsed = JSON.parse(tailLines[tailLines.length - 1]);
+    assert.equal(lastParsed.i, 999, 'last line in tail must be the last line written');
+  } finally {
+    await fsp.unlink(tmpFile).catch(() => {});
+  }
+
+  const fullContent = await smartReadFileTail(tmpFile + '.nonexistent', 1024, 'utf8').catch(() => '');
+  assert.equal(fullContent, '', 'missing file returns empty on error');
+});
+
+test('AsyncMutex serializes concurrent operations and releases on error', async () => {
+  const { AsyncMutex } = require('../lib/mutex');
+  const mutex = new AsyncMutex();
+  const order = [];
+
+  // Test basic serialization: three concurrent tasks must run sequentially
+  const p1 = mutex.run(async () => { order.push('a-start'); await new Promise(r => setTimeout(r, 20)); order.push('a-end'); return 'a'; });
+  const p2 = mutex.run(async () => { order.push('b-start'); order.push('b-end'); return 'b'; });
+  const p3 = mutex.run(async () => { order.push('c-start'); order.push('c-end'); return 'c'; });
+
+  const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+  assert.equal(r1, 'a');
+  assert.equal(r2, 'b');
+  assert.equal(r3, 'c');
+  assert.deepStrictEqual(order, ['a-start', 'a-end', 'b-start', 'b-end', 'c-start', 'c-end'], 'tasks must run sequentially');
+
+  // Test that mutex releases on error
+  const errResult = mutex.run(async () => { throw new Error('test-error'); }).catch((e) => e.message);
+  const afterResult = mutex.run(async () => 'after-error');
+  assert.equal(await errResult, 'test-error', 'error must propagate');
+  assert.equal(await afterResult, 'after-error', 'mutex must release after error');
 });

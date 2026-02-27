@@ -344,7 +344,7 @@ No reverse proxy required. Ports must be open on the host firewall.
 Configure all four to enable version checking and the "Update Now" button in Settings → System Health. Leave any unset to hide the update UI entirely.
 
 - `CAJAL_GITHUB_REPO` — `owner/repo` format, queried against GitHub Releases API
-- `CAJAL_UPDATE_IMAGE` — image shown in update panel (e.g. `ghcr.io/nniell_sesai/cajal:latest`)
+- `CAJAL_UPDATE_IMAGE` — image shown in update panel (e.g. `ghcr.io/sentineledge-ai/cajal:latest`)
 - `CAJAL_WATCHTOWER_URL` — Watchtower HTTP API URL, internal Docker network only (e.g. `http://cajal-watchtower:8080`)
 - `CAJAL_WATCHTOWER_TOKEN` — must match `CAJAL_WATCHTOWER_TOKEN` in `.env` and `WATCHTOWER_HTTP_API_TOKEN` used by the `cajal-watchtower` container
 

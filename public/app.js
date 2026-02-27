@@ -1521,8 +1521,7 @@ function normalizePublicServiceStatus(status = '') {
 function publicServiceBadgeStateText(status = '') {
   const value = normalizePublicServiceStatus(status);
   if (value === 'up') return 'UP';
-  if (value === 'down') return 'DOWN';
-  return 'CHECKING';
+  return 'DOWN';
 }
 
 function normalizeLocationPingMonitorStatus(status = '') {

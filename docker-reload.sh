@@ -238,6 +238,7 @@ main() {
       fi
       ;;
     rebuild)
+      ensure_env
       if [ -n "$compose_cmd" ] && [ -f docker-compose.yml ]; then
         compose_rebuild "$compose_cmd"
       else

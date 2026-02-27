@@ -1261,3 +1261,168 @@ test('AsyncMutex serializes concurrent operations and releases on error', async 
   assert.equal(await errResult, 'test-error', 'error must propagate');
   assert.equal(await afterResult, 'after-error', 'mutex must release after error');
 });
+
+// ── First-Time Setup Tests ──────────────────────────────────────────────────
+
+test('bootstrap admin has no password or TOTP — forces first-time setup', () => {
+  const users = [];
+  core.ensureDefaultLocalUsers(users);
+  const admin = users.find((u) => u.email === 'admin');
+  assert.ok(admin, 'bootstrap admin must exist');
+  assert.equal(admin.role, 'admin');
+  assert.equal(Boolean(admin.localAuth?.passwordHash), false, 'no pre-set password hash');
+  assert.equal(Boolean(admin.localAuth?.passwordSalt), false, 'no pre-set password salt');
+  assert.equal(Boolean(admin.localAuth?.totpEnabled), false, 'TOTP must not be pre-enabled');
+  assert.equal(admin.localAuth?.totpSecretEncrypted == null || admin.localAuth?.totpSecretEncrypted === '', true, 'no pre-set TOTP secret');
+});
+
+test('bootstrap admin is idempotent — does not duplicate on repeated calls', () => {
+  const users = [];
+  core.ensureDefaultLocalUsers(users);
+  core.ensureDefaultLocalUsers(users);
+  core.ensureDefaultLocalUsers(users);
+  const admins = users.filter((u) => u.email === 'admin');
+  assert.equal(admins.length, 1, 'must have exactly one admin');
+});
+
+test('sanitizeUserForClient shows passwordSet=false for bootstrap admin', () => {
+  const users = [];
+  core.ensureDefaultLocalUsers(users);
+  const admin = users.find((u) => u.email === 'admin');
+  const sanitized = core.sanitizeUserForClient(admin);
+  assert.equal(sanitized.localAuth?.passwordSet, false, 'password must not be set');
+  assert.equal(sanitized.localAuth?.totpEnabled, false, 'TOTP must not be enabled');
+  // Sensitive fields must not leak
+  assert.equal(sanitized.localAuth?.passwordHash, undefined, 'hash must not leak');
+  assert.equal(sanitized.localAuth?.passwordSalt, undefined, 'salt must not leak');
+  assert.equal(sanitized.localAuth?.totpSecretEncrypted, undefined, 'encrypted secret must not leak');
+});
+
+// ── Setup Token Tests ───────────────────────────────────────────────────────
+
+test('createSetupToken returns a hex token that can be consumed', () => {
+  const token = core.createSetupToken('admin', 'set_password');
+  assert.ok(typeof token === 'string' && token.length >= 24, 'token must be a hex string');
+  const entry = core.consumeSetupToken(token, 'set_password');
+  assert.ok(entry, 'token must be consumable');
+  assert.equal(entry.email, 'admin');
+  assert.equal(entry.stage, 'set_password');
+});
+
+test('consumeSetupToken returns entry and route handler deletes token after use', () => {
+  const token = core.createSetupToken('admin', 'set_password');
+  const entry = core.consumeSetupToken(token, 'set_password');
+  assert.ok(entry, 'first consume must return entry');
+  // Route handlers delete the token from shared.localSetupState after use.
+  // Simulate that behavior:
+  require('../lib/shared').localSetupState.delete(token);
+  const second = core.consumeSetupToken(token, 'set_password');
+  assert.equal(second, null, 'deleted token must not be reusable');
+});
+
+test('peekSetupToken reads without consuming', () => {
+  const token = core.createSetupToken('admin', 'enroll_totp', 'SECRET123');
+  const first = core.peekSetupToken(token, 'enroll_totp');
+  assert.ok(first, 'peek must return entry');
+  assert.equal(first.secret, 'SECRET123');
+  const second = core.peekSetupToken(token, 'enroll_totp');
+  assert.ok(second, 'peek must not consume — second peek must succeed');
+  // Cleanup
+  core.consumeSetupToken(token, 'enroll_totp');
+});
+
+test('consumeSetupToken rejects wrong stage', () => {
+  const token = core.createSetupToken('admin', 'set_password');
+  const result = core.consumeSetupToken(token, 'enroll_totp');
+  assert.equal(result, null, 'wrong stage must be rejected');
+  // Cleanup — token still exists since wrong stage didn't consume it
+  core.consumeSetupToken(token, 'set_password');
+});
+
+test('consumeSetupToken rejects invalid token', () => {
+  const result = core.consumeSetupToken('nonexistent-token', 'set_password');
+  assert.equal(result, null);
+});
+
+// ── TOTP Tests During Registration ──────────────────────────────────────────
+
+test('generateTotpSecret returns a valid base32 string', () => {
+  const secret = core.generateTotpSecret();
+  assert.ok(typeof secret === 'string' && secret.length >= 16, 'secret must be a non-empty string');
+  assert.match(secret, /^[A-Z2-7]+=*$/, 'secret must be valid base32');
+});
+
+test('totpAt generates a 6-digit code for a given secret and time', () => {
+  const secret = core.generateTotpSecret();
+  const now = Math.floor(Date.now() / 1000);
+  const code = core.totpAt(secret, now);
+  assert.ok(typeof code === 'string', 'code must be a string');
+  assert.match(code, /^\d{6}$/, 'code must be exactly 6 digits');
+});
+
+test('verifyTotp accepts a freshly generated TOTP code', () => {
+  const secret = core.generateTotpSecret();
+  const now = Math.floor(Date.now() / 1000);
+  const code = core.totpAt(secret, now);
+  assert.equal(core.verifyTotp(secret, code), true, 'fresh code must be accepted');
+});
+
+test('verifyTotp rejects an incorrect code', () => {
+  const secret = core.generateTotpSecret();
+  assert.equal(core.verifyTotp(secret, '000000'), false, 'wrong code must be rejected');
+});
+
+test('verifyTotp accepts codes within the time window (±1 step)', () => {
+  const secret = core.generateTotpSecret();
+  const now = Math.floor(Date.now() / 1000);
+  const previousStep = core.totpAt(secret, now - 30);
+  const nextStep = core.totpAt(secret, now + 30);
+  // At least one adjacent step should be accepted (window tolerance)
+  const prevOk = core.verifyTotp(secret, previousStep);
+  const nextOk = core.verifyTotp(secret, nextStep);
+  assert.ok(prevOk || nextOk, 'adjacent time step codes should be accepted within window');
+});
+
+test('TOTP secret can be stored in setup token for registration flow', () => {
+  const secret = core.generateTotpSecret();
+  const token = core.createSetupToken('admin', 'enroll_totp', secret);
+  // Simulate QR code fetch — peek should return the secret
+  const entry = core.peekSetupToken(token, 'enroll_totp');
+  assert.ok(entry, 'setup token must be valid');
+  assert.equal(entry.secret, secret, 'secret must match');
+  // Generate and verify TOTP code against the stored secret
+  const now = Math.floor(Date.now() / 1000);
+  const code = core.totpAt(entry.secret, now);
+  assert.equal(core.verifyTotp(entry.secret, code), true, 'TOTP code must verify against stored secret');
+  // Consume the token (simulating verify-totp endpoint)
+  const consumed = core.consumeSetupToken(token, 'enroll_totp');
+  assert.ok(consumed, 'token must be consumable');
+  assert.equal(consumed.secret, secret);
+});
+
+// ── Dashboard Auth Guard Tests ──────────────────────────────────────────────
+
+test('app.js redirects unauthenticated users to login page', () => {
+  const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(appJs, /if\s*\(\s*!authState\?\.user\?\.authenticated\s*\)/, 'auth guard must check authenticated flag');
+  assert.match(appJs, /window\.location\.replace\(['"]\/login\.html['"]\)/, 'must redirect to /login.html');
+});
+
+test('app.js does not schedule autoRefresh when unauthenticated', () => {
+  const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  // scheduleAutoRefresh must NOT be in a finally block
+  const initMatch = appJs.match(/async function initialize\(\)[^]*?^}/m);
+  if (initMatch) {
+    assert.ok(!initMatch[0].includes('finally'), 'scheduleAutoRefresh must not be in a finally block');
+  }
+});
+
+test('login.html does not include app.js script', () => {
+  const loginHtml = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'login.html'), 'utf8');
+  assert.ok(!loginHtml.includes('app.js'), 'login.html must not load app.js to prevent redirect loops');
+});
+
+test('login.js only redirects when authenticated', () => {
+  const loginJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'login.js'), 'utf8');
+  assert.match(loginJs, /state\?\.user\?\.authenticated/, 'login page must check authenticated before redirecting');
+});

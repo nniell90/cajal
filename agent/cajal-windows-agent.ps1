@@ -31,6 +31,84 @@ function Write-AgentLog {
   Write-Host "[agent] $Message"
 }
 
+# ── Config file support ─────────────────────────────────────────────────────
+function Get-ConfigFilePath {
+  $candidates = @()
+  $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent ([Environment]::GetCommandLineArgs()[0]) }
+  if ($scriptDir) { $candidates += Join-Path $scriptDir 'cajal-agent.json' }
+  if ($env:ProgramData) { $candidates += Join-Path $env:ProgramData 'Cajal\cajal-agent.json' }
+  foreach ($path in $candidates) {
+    if (Test-Path -LiteralPath $path) { return $path }
+  }
+  if ($env:ProgramData) { return Join-Path $env:ProgramData 'Cajal\cajal-agent.json' }
+  if ($scriptDir) { return Join-Path $scriptDir 'cajal-agent.json' }
+  return 'cajal-agent.json'
+}
+
+function Read-ConfigFile {
+  $configPath = Get-ConfigFilePath
+  if (-not (Test-Path -LiteralPath $configPath)) { return $null }
+  try {
+    return Get-Content -LiteralPath $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Save-ConfigFile {
+  param([hashtable]$Config)
+  $configPath = Get-ConfigFilePath
+  $dir = Split-Path -Parent $configPath
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+    New-Item -ItemType Directory -Path $dir -Force -ErrorAction SilentlyContinue | Out-Null
+  }
+  $Config | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $configPath -Encoding UTF8 -ErrorAction Stop
+  Write-AgentLog "Configuration saved to $configPath"
+}
+
+# Load from config file if params not provided via CLI or env
+if ([string]::IsNullOrWhiteSpace($Server) -or [string]::IsNullOrWhiteSpace($Site) -or [string]::IsNullOrWhiteSpace($Password)) {
+  $config = Read-ConfigFile
+  if ($config) {
+    if ([string]::IsNullOrWhiteSpace($Server) -and $config.server) { $Server = [string]$config.server }
+    if ([string]::IsNullOrWhiteSpace($Site) -and $config.site) { $Site = [string]$config.site }
+    if ([string]::IsNullOrWhiteSpace($Password) -and $config.password) { $Password = [string]$config.password }
+    if ($config.insecureTls -eq $true) { $InsecureTls = [switch]$true }
+  }
+}
+
+# Interactive first-run setup if still missing required params
+if ([string]::IsNullOrWhiteSpace($Server) -or [string]::IsNullOrWhiteSpace($Site) -or [string]::IsNullOrWhiteSpace($Password)) {
+  Write-Host ''
+  Write-Host '╔══════════════════════════════════════╗'
+  Write-Host '║   Cajal ICBM - Windows Agent Setup   ║'
+  Write-Host '╚══════════════════════════════════════╝'
+  Write-Host ''
+  if ([string]::IsNullOrWhiteSpace($Server)) {
+    $Server = Read-Host 'Cajal server URL (e.g. https://cajal.example.com:4000)'
+  }
+  if ([string]::IsNullOrWhiteSpace($Site)) {
+    $Site = Read-Host 'Site ID (from Cajal dashboard)'
+  }
+  if ([string]::IsNullOrWhiteSpace($Password)) {
+    $Password = Read-Host 'Agent password (from site settings)'
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($Server) -and -not [string]::IsNullOrWhiteSpace($Site) -and -not [string]::IsNullOrWhiteSpace($Password)) {
+    try {
+      Save-ConfigFile @{
+        server = $Server
+        site = $Site
+        password = $Password
+        insecureTls = [bool]$InsecureTls
+      }
+    } catch {
+      Write-AgentLog "Warning: could not save config file: $($_.Exception.Message)"
+    }
+  }
+  Write-Host ''
+}
+
 if ([string]::IsNullOrWhiteSpace($Server)) {
   throw 'CAJAL agent server is required (set -Server or CAJAL_AGENT_SERVER).'
 }

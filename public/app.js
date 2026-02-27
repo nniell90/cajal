@@ -5078,6 +5078,24 @@ async function loadDashboard(options = {}) {
   refreshHeartbeatTimers();
 }
 
+async function loadAdminSections() {
+  await loadSsoSettings();
+  await loadRuntimeSettings();
+  await loadWebhookRoutingSettings();
+  await loadSslSettings();
+  await loadLocationSettings();
+  await loadSystemHealth();
+  initVersionCheckSection();
+  await loadManagedUsers();
+}
+
+async function reloadAfterLogin() {
+  await loadAuthState();
+  await loadAlertSilenceState();
+  await loadAdminSections();
+  await loadDashboard();
+}
+
 async function initialize() {
   try {
     await loadAuthState();
@@ -5092,15 +5110,8 @@ async function initialize() {
       // Version display degrades gracefully
     }
     await loadAlertSilenceState();
-    await loadSsoSettings();
-    await loadRuntimeSettings();
+    await loadAdminSections();
     maybeShowSetupWizard();
-    await loadWebhookRoutingSettings();
-    await loadSslSettings();
-    await loadLocationSettings();
-    await loadSystemHealth();
-    initVersionCheckSection();
-    await loadManagedUsers();
     await loadDashboard();
   } catch (err) {
     setNotice(err.message);
@@ -5516,8 +5527,7 @@ localAuthForm?.addEventListener('submit', async (event) => {
       });
       if (result?.ok) {
         closeLocalAuthDialog();
-        await loadAuthState();
-        await loadDashboard();
+        await reloadAfterLogin();
         return;
       }
       if (result?.next === 'enroll_totp' && result?.setupToken) {
@@ -5544,8 +5554,7 @@ localAuthForm?.addEventListener('submit', async (event) => {
         })
       });
       closeLocalAuthDialog();
-      await loadAuthState();
-      await loadDashboard();
+      await reloadAfterLogin();
       return;
     }
 
@@ -5562,8 +5571,7 @@ localAuthForm?.addEventListener('submit', async (event) => {
     });
     if (result.ok) {
       closeLocalAuthDialog();
-      await loadAuthState();
-      await loadDashboard();
+      await reloadAfterLogin();
       return;
     }
     if (result.next === 'set_password') {

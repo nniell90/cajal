@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   cajal:
-    build: .
+    image: ghcr.io/nniell90/cajal:latest
     container_name: cajal-app
     depends_on:
       postgres:
@@ -27,11 +27,42 @@ services:
       CAJAL_STORAGE_BACKEND: postgres
       CAJAL_DATABASE_URL: postgresql://${CAJAL_DB_USER:-cajal}:${CAJAL_DB_PASSWORD:-cajal}@cajal-postgres:5432/${CAJAL_DB_NAME:-cajal}
       CAJAL_DATABASE_SSL: disable
+      CAJAL_WATCHTOWER_URL: http://cajal-watchtower:8080
+      CAJAL_WATCHTOWER_TOKEN: ${CAJAL_WATCHTOWER_TOKEN:-}
     ports:
       - "4000:4000"
       - "5514:5514/udp"
       - "5514:5514/tcp"
       - "2055:2055/udp"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: unless-stopped
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: cajal-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      AUTH: 1
+      POST: 1
+      DELETE: 1
+      NETWORKS: 1
+    restart: unless-stopped
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: cajal-watchtower
+    depends_on:
+      - socket-proxy
+    environment:
+      DOCKER_HOST: tcp://cajal-socket-proxy:2375
+      WATCHTOWER_HTTP_API_TOKEN: ${CAJAL_WATCHTOWER_TOKEN:-}
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+    command: --http-api-update --interval 86400
     restart: unless-stopped
 
 volumes:

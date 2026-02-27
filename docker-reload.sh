@@ -122,6 +122,10 @@ ensure_env() {
   fi
 }
 
+read_env_var() {
+  grep -E "^$1=" .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true
+}
+
 ensure_postgres_container() {
   docker network inspect "$NETWORK_NAME" >/dev/null 2>&1 || docker network create "$NETWORK_NAME" >/dev/null
   docker volume inspect "$DB_VOLUME" >/dev/null 2>&1 || docker volume create "$DB_VOLUME" >/dev/null
@@ -135,19 +139,23 @@ ensure_postgres_container() {
     return
   fi
 
-  local db_pass
-  db_pass="$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
+  local db_name db_user db_pass
+  db_name="$(read_env_var CAJAL_DB_NAME)"
+  db_name="${db_name:-cajal}"
+  db_user="$(read_env_var CAJAL_DB_USER)"
+  db_user="${db_user:-cajal}"
+  db_pass="$(read_env_var CAJAL_DB_PASSWORD)"
   db_pass="${db_pass:-cajal}"
 
   docker run -d \
     --name "$DB_CONTAINER" \
     --network "$NETWORK_NAME" \
     --restart unless-stopped \
-    -e POSTGRES_DB=cajal \
-    -e POSTGRES_USER=cajal \
+    -e POSTGRES_DB="$db_name" \
+    -e POSTGRES_USER="$db_user" \
     -e POSTGRES_PASSWORD="$db_pass" \
     -v "$DB_VOLUME:/var/lib/postgresql/data" \
-    --health-cmd "pg_isready -U cajal -d cajal" \
+    --health-cmd "pg_isready -U $db_user -d $db_name" \
     --health-interval 5s \
     --health-timeout 3s \
     --health-retries 20 \
@@ -155,6 +163,14 @@ ensure_postgres_container() {
 }
 
 run_app_container() {
+  local db_name db_user db_pass
+  db_name="$(read_env_var CAJAL_DB_NAME)"
+  db_name="${db_name:-cajal}"
+  db_user="$(read_env_var CAJAL_DB_USER)"
+  db_user="${db_user:-cajal}"
+  db_pass="$(read_env_var CAJAL_DB_PASSWORD)"
+  db_pass="${db_pass:-cajal}"
+
   docker rm -f "$APP_CONTAINER" >/dev/null 2>&1 || true
   docker run -d \
     --name "$APP_CONTAINER" \
@@ -164,8 +180,9 @@ run_app_container() {
     --env-file .env \
     -e PORT=4000 \
     -e CAJAL_STORAGE_BACKEND=postgres \
-    -e CAJAL_DATABASE_URL=postgresql://cajal:"$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || echo cajal)"@"$DB_CONTAINER":5432/cajal \
+    -e CAJAL_DATABASE_URL="postgresql://${db_user}:${db_pass}@${DB_CONTAINER}:5432/${db_name}" \
     -e CAJAL_DATABASE_SSL=disable \
+    -e CAJAL_WATCHTOWER_URL=http://"$WATCHTOWER_CONTAINER":8080 \
     -p 4000:4000 \
     -p 5514:5514/udp \
     -p 5514:5514/tcp \

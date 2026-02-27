@@ -11,7 +11,7 @@ function readFile(relativePath) {
 
 test('header keeps version + patch notes affordance wired to help anchor', () => {
   const html = readFile('public/index.html');
-  assert.match(html, /class="version-label-inline">Version 1\.3</);
+  assert.match(html, /class="version-label-inline">Version 1\.4</);
   assert.match(html, /class="version-patch-badge" data-help-section="patch-notes">Patch Notes</);
 });
 
@@ -123,4 +123,96 @@ test('app.js includes setup wizard functions and state', () => {
   assert.match(js, /function maybeShowSetupWizard/);
   assert.match(js, /function markWizardComplete/);
   assert.match(js, /setupWizardCompleted/);
+});
+
+// ── Install / update flow regression tests ─────────────────────────────────
+
+test('docker-compose.yml uses image pull (not build) for remote installs', () => {
+  const yml = readFile('docker-compose.yml');
+  assert.match(yml, /image:\s*ghcr\.io\/nniell90\/cajal/);
+  assert.ok(!yml.includes('build: .'), 'docker-compose.yml should not use build: . — remote users cannot build from source');
+});
+
+test('docker-compose.yml watchtower token default matches cajal service default', () => {
+  const yml = readFile('docker-compose.yml');
+  const cajalToken = yml.match(/CAJAL_WATCHTOWER_TOKEN:\s*\$\{CAJAL_WATCHTOWER_TOKEN:-(.*?)\}/);
+  const wtToken = yml.match(/WATCHTOWER_HTTP_API_TOKEN:\s*\$\{CAJAL_WATCHTOWER_TOKEN:-(.*?)\}/);
+  assert.ok(cajalToken, 'cajal service must reference CAJAL_WATCHTOWER_TOKEN');
+  assert.ok(wtToken, 'watchtower service must reference CAJAL_WATCHTOWER_TOKEN');
+  assert.equal(cajalToken[1], wtToken[1], 'token fallback defaults must match between cajal and watchtower services');
+});
+
+test('docker-compose.yml includes watchtower and socket-proxy services', () => {
+  const yml = readFile('docker-compose.yml');
+  assert.match(yml, /cajal-watchtower/);
+  assert.match(yml, /cajal-socket-proxy/);
+  assert.match(yml, /containrrr\/watchtower/);
+  assert.match(yml, /tecnativa\/docker-socket-proxy/);
+});
+
+test('docker-compose.yml cajal service has watchtower label', () => {
+  const yml = readFile('docker-compose.yml');
+  assert.match(yml, /com\.centurylinklabs\.watchtower\.enable=true/);
+});
+
+test('docker-reload.sh reads CAJAL_DB_USER and CAJAL_DB_NAME from .env', () => {
+  const sh = readFile('docker-reload.sh');
+  assert.match(sh, /CAJAL_DB_USER/, 'should reference CAJAL_DB_USER');
+  assert.match(sh, /CAJAL_DB_NAME/, 'should reference CAJAL_DB_NAME');
+  assert.ok(!sh.includes('-e POSTGRES_DB=cajal'), 'should not hardcode POSTGRES_DB=cajal');
+  assert.ok(!sh.includes('-e POSTGRES_USER=cajal'), 'should not hardcode POSTGRES_USER=cajal');
+});
+
+test('docker-reload.sh DATABASE_URL uses dynamic user and db name', () => {
+  const sh = readFile('docker-reload.sh');
+  const urlLine = sh.split('\n').find(l => l.includes('CAJAL_DATABASE_URL='));
+  assert.ok(urlLine, 'DATABASE_URL assignment must exist');
+  assert.match(urlLine, /\$\{?db_user\}?/, 'DATABASE_URL must use db_user variable');
+  assert.match(urlLine, /\$\{?db_name\}?/, 'DATABASE_URL must use db_name variable');
+});
+
+test('version check endpoint returns watchtowerReady flag', () => {
+  const router = readFile('lib/router.js');
+  const checkBlock = router.slice(
+    router.indexOf("url.pathname === '/api/system/version/check'"),
+    router.indexOf("url.pathname === '/api/system/update/apply'")
+  );
+  assert.match(checkBlock, /watchtowerReady/, 'version check response must include watchtowerReady');
+  assert.match(checkBlock, /Boolean\(WATCHTOWER_URL && WATCHTOWER_TOKEN\)/, 'watchtowerReady must check both URL and TOKEN');
+});
+
+test('update/apply clears version check cache on success', () => {
+  const router = readFile('lib/router.js');
+  const applyStart = router.indexOf("url.pathname === '/api/system/update/apply'");
+  const applyBlock = router.slice(applyStart, applyStart + 2500);
+  assert.match(applyBlock, /_versionCheckCache\s*=\s*null/, 'must clear version cache after successful update');
+});
+
+test('app.js shows manual update command when watchtowerReady is false', () => {
+  const js = readFile('public/app.js');
+  assert.match(js, /watchtowerReady\s*===\s*false/, 'must check watchtowerReady flag');
+  assert.match(js, /docker compose pull/, 'must show manual docker compose command');
+});
+
+test('app.js reloads admin sections after login via reloadAfterLogin', () => {
+  const js = readFile('public/app.js');
+  assert.match(js, /async function reloadAfterLogin/, 'reloadAfterLogin must exist');
+  assert.match(js, /async function loadAdminSections/, 'loadAdminSections must exist');
+  const reloadFn = js.slice(js.indexOf('async function reloadAfterLogin'), js.indexOf('async function reloadAfterLogin') + 300);
+  assert.match(reloadFn, /loadAdminSections/, 'reloadAfterLogin must call loadAdminSections');
+  assert.match(reloadFn, /loadAuthState/, 'reloadAfterLogin must call loadAuthState');
+});
+
+test('constants.js has sensible defaults for update config', () => {
+  const constants = readFile('lib/constants.js');
+  assert.match(constants, /GITHUB_REPO.*'nniell90\/cajal'/, 'GITHUB_REPO default');
+  assert.match(constants, /UPDATE_IMAGE.*'ghcr\.io\/nniell90\/cajal:latest'/, 'UPDATE_IMAGE default');
+  assert.match(constants, /WATCHTOWER_URL.*'http:\/\/cajal-watchtower:8080'/, 'WATCHTOWER_URL default');
+});
+
+test('.env.example documents auto-generation behavior', () => {
+  const env = readFile('.env.example');
+  assert.match(env, /auto-generat/i, 'must mention auto-generation');
+  assert.match(env, /docker-reload\.sh/, 'must reference docker-reload.sh');
+  assert.match(env, /Default:.*nniell90\/cajal/i, 'must document GITHUB_REPO default');
 });

@@ -354,14 +354,18 @@ No reverse proxy required. Ports must be open on the host firewall.
 
 ### 6.5 Auto-update (Watchtower)
 
-Configure all four to enable version checking and the "Update Now" button in Settings → System Health. Leave any unset to hide the update UI entirely.
+Version checking and the "Update Now" button in Settings → System Health work out of the box — no env vars need to be set manually. All defaults are built in:
 
-- `CAJAL_GITHUB_REPO` — `owner/repo` format, queried against GitHub Releases API
-- `CAJAL_UPDATE_IMAGE` — image shown in update panel (e.g. `ghcr.io/nniell90/cajal:latest`)
-- `CAJAL_WATCHTOWER_URL` — Watchtower HTTP API URL, internal Docker network only (e.g. `http://cajal-watchtower:8080`)
-- `CAJAL_WATCHTOWER_TOKEN` — must match `CAJAL_WATCHTOWER_TOKEN` in `.env` and `WATCHTOWER_HTTP_API_TOKEN` used by the `cajal-watchtower` container
+| Variable | Default | Purpose |
+|---|---|---|
+| `CAJAL_GITHUB_REPO` | `nniell90/cajal` | GitHub Releases API query |
+| `CAJAL_UPDATE_IMAGE` | `ghcr.io/nniell90/cajal:latest` | Image shown in update panel |
+| `CAJAL_WATCHTOWER_URL` | `http://cajal-watchtower:8080` | Watchtower HTTP API (internal) |
+| `CAJAL_WATCHTOWER_TOKEN` | *(auto-generated)* | Must match Watchtower container |
 
-The update button triggers Watchtower via its HTTP API, which pulls the new image and hot-swaps the `cajal-app` container. The page polls `/api/health` and reloads automatically when the new version is detected (~30s). Update triggers are rate-limited to 1 per 5 minutes per admin and logged to the security audit trail.
+The "Update Now" button triggers Watchtower via its HTTP API, which pulls the new image and hot-swaps the `cajal-app` container. The page polls `/api/health` and reloads automatically when the new version is detected (~30s). Update triggers are rate-limited to 1 per 5 minutes per admin and logged to the security audit trail.
+
+If Watchtower is not running or the token is missing, the UI will still show version info and release notes but display a manual update command instead of the "Update Now" button.
 
 ### 6.6 SSO (Entra)
 

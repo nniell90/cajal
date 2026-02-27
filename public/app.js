@@ -7721,7 +7721,9 @@ function renderVersionCheckSection(result = null, loading = false, statusMsg = '
         ${statusHtml}
         <div class="update-available-actions">
           ${result.releaseUrl ? `<a href="${escapeHtml(result.releaseUrl)}" target="_blank" rel="noopener noreferrer" class="ghost-btn update-notes-link">Release Notes &#8599;</a>` : ''}
-          <button id="applyUpdateBtn" type="button" class="update-now-btn" ${updateInProgress ? 'disabled' : ''}>${updateInProgress ? 'Updating\u2026' : 'Update Now'}</button>
+          ${result.watchtowerReady === false
+            ? '<span class="update-warning">Watchtower not configured &mdash; update manually with <code>docker compose pull &amp;&amp; docker compose up -d</code></span>'
+            : `<button id="applyUpdateBtn" type="button" class="update-now-btn" ${updateInProgress ? 'disabled' : ''}>${updateInProgress ? 'Updating\u2026' : 'Update Now'}</button>`}
         </div>
       </div>`;
   } else {

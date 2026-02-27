@@ -5102,6 +5102,10 @@ async function reloadAfterLogin() {
 async function initialize() {
   try {
     await loadAuthState();
+    if (!authState?.user?.authenticated) {
+      window.location.replace('/login.html');
+      return;
+    }
     // Fetch version from the public health endpoint (non-fatal if it fails)
     try {
       const health = await getJson('/api/health');

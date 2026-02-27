@@ -74,19 +74,25 @@ ensure_env() {
     echo "INFO: CAJAL_CONFIG_KEY auto-generated and saved to .env"
   fi
 
-  # ── Auto-generate CAJAL_DB_PASSWORD if missing or default ─────────────────
+  # ── Auto-generate CAJAL_DB_PASSWORD only on fresh installs ────────────────
+  # If the postgres container already exists its password is fixed in the data
+  # volume — changing .env without recreating postgres breaks the connection.
   local db_pass
   db_pass="$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
   if [ -z "$db_pass" ] || echo "$db_pass" | grep -qi 'change_me\|CHANGE_ME'; then
-    local new_pass
-    new_pass="$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")"
-    if grep -q '^CAJAL_DB_PASSWORD=' .env; then
-      sed -i "s|^CAJAL_DB_PASSWORD=.*|CAJAL_DB_PASSWORD=${new_pass}|" .env
+    if docker inspect "${DB_CONTAINER}" >/dev/null 2>&1; then
+      echo "WARNING: CAJAL_DB_PASSWORD is not configured but a postgres container already"
+      echo "         exists. Set CAJAL_DB_PASSWORD in .env to match your database password."
     else
-      echo "CAJAL_DB_PASSWORD=${new_pass}" >> .env
+      local new_pass
+      new_pass="$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")"
+      if grep -q '^CAJAL_DB_PASSWORD=' .env; then
+        sed -i "s|^CAJAL_DB_PASSWORD=.*|CAJAL_DB_PASSWORD=${new_pass}|" .env
+      else
+        echo "CAJAL_DB_PASSWORD=${new_pass}" >> .env
+      fi
+      echo "INFO: CAJAL_DB_PASSWORD auto-generated and saved to .env"
     fi
-    echo "INFO: CAJAL_DB_PASSWORD auto-generated and saved to .env"
-    db_pass="$new_pass"
   fi
 
   # ── Auto-generate CAJAL_WATCHTOWER_TOKEN if missing or default ────────────

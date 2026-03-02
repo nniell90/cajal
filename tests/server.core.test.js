@@ -1426,3 +1426,238 @@ test('login.js only redirects when authenticated', () => {
   const loginJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'login.js'), 'utf8');
   assert.match(loginJs, /state\?\.user\?\.authenticated/, 'login page must check authenticated before redirecting');
 });
+
+// ── Semver Comparison Tests ────────────────────────────────────────────────
+
+const { semverNewer } = require('../lib/routes/system');
+
+test('semverNewer returns true when latest is a higher major version', () => {
+  assert.equal(semverNewer('2.0.0', '1.9.9'), true);
+});
+
+test('semverNewer returns true when latest is a higher minor version', () => {
+  assert.equal(semverNewer('1.6.0', '1.5.1'), true);
+});
+
+test('semverNewer returns true when latest is a higher patch version', () => {
+  assert.equal(semverNewer('1.5.2', '1.5.1'), true);
+});
+
+test('semverNewer returns false when versions are equal', () => {
+  assert.equal(semverNewer('1.5.1', '1.5.1'), false);
+});
+
+test('semverNewer returns false when current is newer', () => {
+  assert.equal(semverNewer('1.4.0', '1.5.1'), false);
+  assert.equal(semverNewer('1.5.0', '1.5.1'), false);
+  assert.equal(semverNewer('0.9.9', '1.0.0'), false);
+});
+
+test('semverNewer handles missing or empty versions gracefully', () => {
+  assert.equal(semverNewer('', '1.0.0'), false);
+  assert.equal(semverNewer(null, '1.0.0'), false);
+  assert.equal(semverNewer(undefined, '1.0.0'), false);
+  assert.equal(semverNewer('1.0.0', ''), true);
+  assert.equal(semverNewer('1.0.0', null), true);
+});
+
+test('semverNewer handles partial version strings', () => {
+  assert.equal(semverNewer('2', '1.9.9'), true);
+  assert.equal(semverNewer('1.5', '1.4.9'), true);
+  assert.equal(semverNewer('1', '1.0.0'), false);
+});
+
+// ── Account Lockout Expiry Tests ───────────────────────────────────────────
+
+test('account lockout expires after cooldown period', () => {
+  const email = 'lockout-expiry-test@example.com';
+  core.clearLoginAccountFailures(email);
+
+  // Trigger lockout (8 failures at threshold)
+  const baseTime = Date.now();
+  let result;
+  for (let i = 0; i < 8; i++) {
+    result = core.recordLoginAccountFailure(email, baseTime);
+  }
+  assert.equal(result.locked, true, 'account must be locked after 8 failures');
+
+  // Check still locked immediately
+  const stillLocked = core.getLoginAccountLockState(email, baseTime + 1000);
+  assert.equal(stillLocked.locked, true, 'must still be locked after 1 second');
+  assert.ok(stillLocked.retryAfterSec > 0, 'retryAfterSec must be positive');
+
+  // Check unlocked after 15 minutes + 1 second
+  const unlocked = core.getLoginAccountLockState(email, baseTime + 15 * 60 * 1000 + 1000);
+  assert.equal(unlocked.locked, false, 'account must unlock after cooldown');
+
+  core.clearLoginAccountFailures(email);
+});
+
+test('successful login clears lockout state', () => {
+  const email = 'lockout-clear-test@example.com';
+  core.clearLoginAccountFailures(email);
+
+  for (let i = 0; i < 8; i++) {
+    core.recordLoginAccountFailure(email);
+  }
+  const locked = core.getLoginAccountLockState(email);
+  assert.equal(locked.locked, true);
+
+  core.clearLoginAccountFailures(email);
+  const cleared = core.getLoginAccountLockState(email);
+  assert.equal(cleared.locked, false, 'lockout must be cleared');
+  assert.equal(cleared.failures, 0, 'failure count must be zero');
+});
+
+// ── TOTP Replay Prevention Tests ───────────────────────────────────────────
+
+test('verifyTotp rejects non-numeric and short codes', () => {
+  const secret = core.generateTotpSecret();
+  assert.equal(core.verifyTotp(secret, 'abcdef'), false, 'alphabetic code rejected');
+  assert.equal(core.verifyTotp(secret, '12345'), false, '5-digit code rejected');
+  assert.equal(core.verifyTotp(secret, '1234567'), false, '7-digit code rejected');
+  assert.equal(core.verifyTotp(secret, ''), false, 'empty code rejected');
+  assert.equal(core.verifyTotp(secret, null), false, 'null code rejected');
+});
+
+test('auth.js implements TOTP replay prevention via totpLastUsedStep', () => {
+  const authSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'routes', 'auth.js'), 'utf8');
+  // Must check totpLastUsedStep map before accepting TOTP
+  assert.ok(authSrc.includes('totpLastUsedStep'), 'auth must track totpLastUsedStep');
+  assert.ok(authSrc.includes('TOTP code already used'), 'auth must reject replayed TOTP codes');
+  // Must persist step to user record
+  assert.ok(authSrc.includes('user.localAuth.totpLastUsedStep'), 'must persist step to user record');
+});
+
+// ── Login Response Shape Tests ─────────────────────────────────────────────
+
+test('login route returns set_password for admin without password', () => {
+  const authSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'routes', 'auth.js'), 'utf8');
+  // When user has no password, login must return { next: 'set_password', setupToken }
+  assert.ok(authSrc.includes("next: 'set_password'"), 'must return set_password stage for passwordless users');
+  // When user needs TOTP enrollment, must return { next: 'enroll_totp', setupToken, ... }
+  assert.ok(authSrc.includes("next: 'enroll_totp'"), 'must return enroll_totp stage');
+  // When user has TOTP enabled and password correct but no totp code sent, must return { next: 'verify_totp' }
+  assert.ok(authSrc.includes("next: 'verify_totp'"), 'must return verify_totp stage');
+});
+
+test('unknown user login returns same shape as passwordless user (anti-enumeration)', () => {
+  const authSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'routes', 'auth.js'), 'utf8');
+  // Both unknown users and passwordless users must get { next: 'set_password', setupToken: ... }
+  // The unknown-user path creates a dummy token to match the response shape
+  assert.ok(authSrc.includes('dummyToken') || authSrc.includes('dummy'), 'must use dummy token for unknown users');
+});
+
+// ── Password Verification Tests ────────────────────────────────────────────
+
+test('hashPassword and verifyPassword round-trip correctly', () => {
+  const { hashPassword, verifyPassword } = require('../lib/auth');
+  const result = hashPassword('MySecurePassword123!');
+  assert.ok(result.hash, 'hash must exist');
+  assert.ok(result.salt, 'salt must exist');
+  assert.ok(result.iterations > 0, 'iterations must be positive');
+
+  assert.equal(verifyPassword('MySecurePassword123!', {
+    passwordHash: result.hash,
+    passwordSalt: result.salt,
+    passwordIterations: result.iterations
+  }), true, 'correct password must verify');
+
+  assert.equal(verifyPassword('WrongPassword', {
+    passwordHash: result.hash,
+    passwordSalt: result.salt,
+    passwordIterations: result.iterations
+  }), false, 'wrong password must fail');
+});
+
+test('verifyPassword uses timing-safe comparison', () => {
+  const authSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'auth.js'), 'utf8');
+  assert.ok(authSrc.includes('timingSafeEqual'), 'password comparison must use crypto.timingSafeEqual');
+});
+
+test('verifyPassword returns false when no hash/salt stored', () => {
+  const { verifyPassword } = require('../lib/auth');
+  assert.equal(verifyPassword('password', {}), false, 'empty localAuth must fail');
+  assert.equal(verifyPassword('password', { passwordHash: '', passwordSalt: '' }), false);
+  assert.equal(verifyPassword('password', undefined), false);
+});
+
+// ── Setup Flow Integration Tests ───────────────────────────────────────────
+
+test('full setup flow: bootstrap → set password → TOTP enroll lifecycle', () => {
+  const shared = require('../lib/shared');
+  const { hashPassword, ensureDefaultLocalUsers, resolveTotpSecretState } = require('../lib/auth');
+  const { encryptJson } = require('../lib/crypto');
+
+  // Step 1: Bootstrap admin — no password, no TOTP
+  const users = [];
+  ensureDefaultLocalUsers(users);
+  const admin = users.find(u => u.email === 'admin');
+  assert.ok(admin, 'admin must exist');
+  assert.equal(Boolean(admin.localAuth.passwordHash), false);
+
+  // Step 2: Login as admin (no password) → get setup token
+  const token1 = core.createSetupToken('admin', 'set_password');
+  assert.ok(token1);
+
+  // Step 3: Set password via setup token
+  const entry = core.consumeSetupToken(token1, 'set_password');
+  assert.ok(entry);
+  assert.equal(entry.email, 'admin');
+  const hashed = hashPassword('TestPassword123');
+  admin.localAuth.passwordHash = hashed.hash;
+  admin.localAuth.passwordSalt = hashed.salt;
+  admin.localAuth.passwordIterations = hashed.iterations;
+  admin.localAuth.passwordChangedAt = new Date().toISOString();
+
+  // Step 4: Check TOTP state — should need enrollment
+  const totpState = resolveTotpSecretState(admin.localAuth);
+  assert.equal(totpState.state, 'enroll', 'TOTP must require enrollment after password set');
+
+  // Step 5: Create TOTP enrollment token
+  const enrollSecret = core.generateTotpSecret();
+  const token2 = core.createSetupToken('admin', 'enroll_totp', enrollSecret);
+
+  // Step 6: Verify TOTP code
+  const now = Math.floor(Date.now() / 1000);
+  const code = core.totpAt(enrollSecret, now);
+  assert.equal(core.verifyTotp(enrollSecret, code), true);
+
+  // Step 7: Persist TOTP enrollment
+  const enrollEntry = core.consumeSetupToken(token2, 'enroll_totp');
+  assert.ok(enrollEntry);
+  admin.localAuth.totpSecretEncrypted = encryptJson({ secret: enrollSecret });
+  admin.localAuth.totpEnabled = true;
+  admin.localAuth.totpChangedAt = new Date().toISOString();
+
+  // Step 8: Verify TOTP state is now 'verify' (enrolled)
+  const finalState = resolveTotpSecretState(admin.localAuth);
+  assert.equal(finalState.state, 'verify', 'TOTP must be in verify state after enrollment');
+  assert.ok(finalState.secret, 'decrypted secret must be recoverable');
+
+  // Cleanup
+  shared.localSetupState.delete(token1);
+  shared.localSetupState.delete(token2);
+});
+
+// ── Login.html Redirect Logic Tests ────────────────────────────────────────
+
+test('auth route only redirects /login.html for authenticated users', () => {
+  const authSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'routes', 'auth.js'), 'utf8');
+  // Must check requestUser.authenticated before redirecting away from /login.html
+  const loginHtmlBlock = authSrc.substring(
+    authSrc.indexOf("url.pathname === '/login.html'"),
+    authSrc.indexOf("url.pathname === '/login.html'") + 200
+  );
+  assert.ok(loginHtmlBlock.includes('authenticated'), '/login.html redirect must check authentication status');
+  assert.ok(loginHtmlBlock.includes('return false'), 'unauthenticated users must fall through to static file server');
+});
+
+test('/api/auth/me does not have rate limiting', () => {
+  const authSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'routes', 'auth.js'), 'utf8');
+  // Find the /api/auth/me handler block
+  const meStart = authSrc.indexOf("url.pathname === '/api/auth/me'");
+  const meEnd = authSrc.indexOf("url.pathname === '/api/auth/local/login'");
+  const meBlock = authSrc.substring(meStart, meEnd);
+  assert.ok(!meBlock.includes('enforceRateLimitOrSend'), '/api/auth/me must not be rate-limited (causes redirect loops)');
+});

@@ -90,7 +90,7 @@ if %errorlevel% neq 0 (
     echo Installing Docker Desktop...
     echo   This may take a few minutes and require a restart.
     echo.
-    winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements
+    winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements --silent
     if !errorlevel! neq 0 (
         echo ERROR: Failed to install Docker Desktop.
         echo        You can install it manually from https://docker.com/get-docker

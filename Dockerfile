@@ -9,6 +9,7 @@ RUN apt-get update \
     ca-certificates \
     dnsutils \
     iputils-ping \
+    iproute2 \
     python3 \
     snmp \
     traceroute \

@@ -10,50 +10,12 @@ env:
   IMAGE_NAME: nniell90/cajal
 
 jobs:
-  build-windows-agent:
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install ps2exe
-        shell: pwsh
-        run: Install-Module -Name ps2exe -Force -Scope CurrentUser
-
-      - name: Compile agent to .exe
-        shell: pwsh
-        run: |
-          Invoke-PS2EXE `
-            -InputFile  agent/cajal-windows-agent.ps1 `
-            -OutputFile agent/cajal-windows-agent.exe `
-            -NoConsole:$false `
-            -Title 'Cajal ICBM Windows Agent' `
-            -Version '${{ github.ref_name }}' `
-            -Description 'Cajal ICBM collector agent for Windows' `
-            -Company 'Cajal ICBM' `
-            -Product 'Cajal Windows Agent'
-
-      - name: Upload .exe as workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-agent-exe
-          path: agent/cajal-windows-agent.exe
-          retention-days: 1
-
   publish:
-    needs: build-windows-agent
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download Windows agent .exe
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-agent-exe
-          path: agent/
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -79,6 +41,30 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  build-windows-agent:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ps2exe
+        shell: pwsh
+        run: Install-Module -Name ps2exe -Force -Scope CurrentUser
+
+      - name: Compile agent to .exe
+        shell: pwsh
+        run: |
+          Invoke-PS2EXE `
+            -InputFile  agent/cajal-windows-agent.ps1 `
+            -OutputFile agent/cajal-windows-agent.exe `
+            -NoConsole:$false `
+            -Title 'Cajal ICBM Windows Agent' `
+            -Version '${{ github.ref_name }}' `
+            -Description 'Cajal ICBM collector agent for Windows' `
+            -Company 'Cajal ICBM' `
+            -Product 'Cajal Windows Agent'
 
       - name: Upload .exe to GitHub release
         env:

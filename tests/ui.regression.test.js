@@ -624,10 +624,10 @@ test('LAN Link Monitor card has double-width CSS', () => {
   assert.ok(cssSrc.includes('grid-column: span 2'), 'lan-link-card must span 2 columns');
 });
 
-test('index.html blocks rendering until auth check completes', () => {
+test('index.html guards rendering until auth check completes', () => {
   const indexSrc = readFile('public/index.html');
-  assert.ok(indexSrc.includes('XMLHttpRequest'), 'must use synchronous XHR for auth guard');
-  assert.ok(indexSrc.includes("xhr.open('GET', '/api/auth/me', false)"), 'XHR must be synchronous (3rd arg false)');
+  assert.ok(indexSrc.includes("fetch('/api/auth/me'"), 'must use fetch for auth guard');
+  assert.ok(indexSrc.includes("visibility"), 'must hide page until auth verified');
   assert.ok(indexSrc.includes("window.location.replace('/login.html')"), 'must redirect to login.html if unauthenticated');
 });
 

@@ -6,14 +6,15 @@
     <title>Cajal ICBM</title>
     <link rel="stylesheet" href="/styles.css" />
     <script>
-      // Synchronous auth check — blocks parser so nothing renders if not logged in
-      try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/api/auth/me', false);
-        xhr.send();
-        var s = JSON.parse(xhr.responseText);
-        if (!s || !s.user || !s.user.authenticated) window.location.replace('/login.html');
-      } catch (e) { window.location.replace('/login.html'); }
+      // Async auth check — hides body until verified
+      document.documentElement.style.visibility = 'hidden';
+      fetch('/api/auth/me', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+          if (!s || !s.user || !s.user.authenticated) return window.location.replace('/login.html');
+          document.documentElement.style.visibility = '';
+        })
+        .catch(function() { window.location.replace('/login.html'); });
     </script>
   </head>
   <body>
@@ -61,17 +62,17 @@
     <section id="settingsPanel" class="settings-panel" hidden>
       <div class="settings-panel-head">
         <h3>Settings</h3>
-        <nav class="settings-tabs">
-          <button type="button" class="settings-tab active" data-tab="general">General</button>
-          <button type="button" class="settings-tab" data-tab="security">Security</button>
-          <button type="button" class="settings-tab" data-tab="notifications">Notifications</button>
-          <button type="button" class="settings-tab" data-tab="system">System</button>
+        <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+          <button type="button" class="settings-tab active" data-tab="general" role="tab" aria-selected="true" aria-controls="settings-tab-general">General</button>
+          <button type="button" class="settings-tab" data-tab="security" role="tab" aria-selected="false" aria-controls="settings-tab-security">Security</button>
+          <button type="button" class="settings-tab" data-tab="notifications" role="tab" aria-selected="false" aria-controls="settings-tab-notifications">Notifications</button>
+          <button type="button" class="settings-tab" data-tab="system" role="tab" aria-selected="false" aria-controls="settings-tab-system">System</button>
         </nav>
         <button id="closeSettingsBtn" type="button" class="ghost-btn">Close</button>
       </div>
 
       <!-- ═══ GENERAL TAB ═══ -->
-      <div class="settings-tab-content active" data-settings-tab="general">
+      <div class="settings-tab-content active" data-settings-tab="general" id="settings-tab-general" role="tabpanel">
         <section id="clockConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
           <button type="button" class="settings-toggle"><span>Clock Settings</span></button>
           <div class="settings-content">
@@ -139,7 +140,7 @@
       </div>
 
       <!-- ═══ SECURITY TAB ═══ -->
-      <div class="settings-tab-content" data-settings-tab="security">
+      <div class="settings-tab-content" data-settings-tab="security" id="settings-tab-security" role="tabpanel">
         <section id="userAdminPanel" class="settings-subpanel settings-section is-collapsed" hidden>
           <button type="button" class="settings-toggle"><span>User Management</span></button>
           <div class="settings-content">
@@ -166,11 +167,11 @@
               <button id="syncNowBtn" type="button" class="ghost-btn">Sync Now</button>
             </div>
             <form id="ssoConfigForm" class="sso-config-form">
-              <input name="tenantId" placeholder="Tenant ID" />
-              <input name="clientId" placeholder="Client ID" />
-              <input name="clientSecret" type="password" placeholder="Client Secret" />
-              <input name="redirectUri" placeholder="Redirect URI" />
-              <input name="scope" placeholder="Scope (openid profile email)" />
+              <label>Tenant ID <input name="tenantId" placeholder="Tenant ID" /></label>
+              <label>Client ID <input name="clientId" placeholder="Client ID" /></label>
+              <label>Client Secret <input name="clientSecret" type="password" placeholder="Client Secret" /></label>
+              <label>Redirect URI <input name="redirectUri" placeholder="Redirect URI" /></label>
+              <label>Scope <input name="scope" placeholder="openid profile email" /></label>
               <button type="submit">Save SSO Config</button>
             </form>
             <p id="ssoConfigMsg"></p>
@@ -245,7 +246,7 @@
       </div>
 
       <!-- ═══ NOTIFICATIONS TAB ═══ -->
-      <div class="settings-tab-content" data-settings-tab="notifications">
+      <div class="settings-tab-content" data-settings-tab="notifications" id="settings-tab-notifications" role="tabpanel">
         <section id="teamsConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
           <button type="button" class="settings-toggle"><span>Teams Notifications</span></button>
           <div class="settings-content">
@@ -284,7 +285,7 @@
       </div>
 
       <!-- ═══ SYSTEM TAB ═══ -->
-      <div class="settings-tab-content" data-settings-tab="system">
+      <div class="settings-tab-content" data-settings-tab="system" id="settings-tab-system" role="tabpanel">
         <section id="systemHealthPanel" class="settings-subpanel settings-section is-collapsed" hidden>
           <button type="button" class="settings-toggle"><span>System Health</span></button>
           <div class="settings-content">
@@ -310,14 +311,14 @@
           <button type="button" class="settings-toggle"><span>Advanced Options</span></button>
           <div class="settings-content">
             <form id="runtimeConfigForm" class="settings-compact-form settings-ports-form">
-              <input name="syslogUdpPort" type="number" min="1" max="65535" placeholder="Syslog UDP Port" />
-              <input name="syslogTcpPort" type="number" min="1" max="65535" placeholder="Syslog TCP Port" />
-              <input name="netflowPort" type="number" min="1" max="65535" placeholder="NetFlow Port" />
-              <input name="snmpPollIntervalMs" type="number" min="1000" placeholder="SNMP Poll Interval (ms)" />
-              <input name="flowTimeoutMs" type="number" min="1000" placeholder="Flow Timeout (ms)" />
-              <input name="pingIntervalMs" type="number" min="1000" placeholder="Ping Interval (ms)" />
-              <input name="globalDataRefreshMs" type="number" min="10000" placeholder="Global Data Refresh (ms)" />
-              <input name="wanTestIntervalMs" type="number" min="1000" placeholder="WAN Test Interval (ms)" />
+              <label>Syslog UDP Port <input name="syslogUdpPort" type="number" min="1" max="65535" placeholder="5514" /></label>
+              <label>Syslog TCP Port <input name="syslogTcpPort" type="number" min="1" max="65535" placeholder="5514" /></label>
+              <label>NetFlow Port <input name="netflowPort" type="number" min="1" max="65535" placeholder="2055" /></label>
+              <label>SNMP Poll Interval (ms) <input name="snmpPollIntervalMs" type="number" min="1000" placeholder="60000" /></label>
+              <label>Flow Timeout (ms) <input name="flowTimeoutMs" type="number" min="1000" placeholder="300000" /></label>
+              <label>Ping Interval (ms) <input name="pingIntervalMs" type="number" min="1000" placeholder="60000" /></label>
+              <label>Global Data Refresh (ms) <input name="globalDataRefreshMs" type="number" min="10000" placeholder="60000" /></label>
+              <label>WAN Test Interval (ms) <input name="wanTestIntervalMs" type="number" min="1000" placeholder="300000" /></label>
               <label class="runtime-toggle-label">
                 <input name="localTotpEnabled" type="checkbox" />
                 Enable Local TOTP MFA

@@ -5008,7 +5008,7 @@ function lanLinkMonitorCard(site, metrics) {
     <article class="site-tile lan-link-card${hasData ? '' : ' is-device-down'}" data-site-id="${escapeHtml(site.id)}">
       <div class="site-top">
         <div class="site-details">
-          <span class="lan-links-badge${hasData ? '' : ' down'}">LAN LINKS</span>
+          <span class="lan-links-badge">LAN LINKS</span>
         </div>
         ${allowDelete ? `<div class="top-controls"><button type="button" class="ghost-btn delete-device" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name || site.id)}">DELETE</button></div>` : ''}
       </div>
@@ -5309,9 +5309,10 @@ closeSettingsBtn?.addEventListener('click', () => {
 settingsPanel?.addEventListener('click', (event) => {
   const tabBtn = event.target.closest('.settings-tab');
   if (tabBtn && tabBtn.dataset.tab) {
-    settingsPanel.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+    settingsPanel.querySelectorAll('.settings-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
     settingsPanel.querySelectorAll('.settings-tab-content').forEach(d => d.classList.remove('active'));
     tabBtn.classList.add('active');
+    tabBtn.setAttribute('aria-selected', 'true');
     const target = settingsPanel.querySelector(`.settings-tab-content[data-settings-tab="${tabBtn.dataset.tab}"]`);
     if (target) target.classList.add('active');
     return;

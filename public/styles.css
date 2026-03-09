@@ -636,6 +636,11 @@ body[data-ui-theme="slate-neon"] {
   background: rgba(66, 189, 190, 0.2);
 }
 
+.ghost-btn:focus-visible {
+  outline: 1px solid rgba(154, 216, 208, 0.9);
+  outline-offset: 1px;
+}
+
 #closeSettingsBtn,
 [id$="Close"],
 [id$="Cancel"],
@@ -2763,20 +2768,14 @@ button.flow-btn.collector-agent-update-btn:hover {
 .lan-links-badge {
   display: inline-block;
   padding: 0.12rem 0.35rem;
-  border: 1px solid rgba(142, 209, 255, 0.7);
+  border: 1px solid rgba(200, 160, 255, 0.7);
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #dff4ff;
-  background: rgba(45, 97, 138, 0.9);
+  color: #e8d5ff;
+  background: rgba(90, 50, 140, 0.9);
   text-shadow: none;
-}
-
-.lan-links-badge.down {
-  color: #ffd4d4;
-  border-color: rgba(255, 100, 116, 0.7);
-  background: rgba(160, 40, 50, 0.9);
 }
 
 .meta-toggle.active {

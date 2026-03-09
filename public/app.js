@@ -3270,7 +3270,7 @@ function renderServerSelfMonitorBadges(data = null, errorMessage = '', firewallP
         ? 'No SNMP monitors are enabled on sites.'
         : (snmpDetail || (snmpPath ? `Using ${snmpPath} for UDP 161 polling; UDP 162 used for traps` : 'UDP 161 polling and UDP 162 traps'))
     ),
-    serverHealthBadgeHtml('TEAMS', teamsValue, teamsTone, teamsTitle),
+    serverHealthBadgeHtml('Refresh', refreshValue, refreshTone, `Global refresh interval ${String(runtime.globalDataRefreshMs || 'n/a')} ms`),
     serverHealthBadgeHtml(
       'Syslog',
       `${syslogUdpUp ? syslogUdpPort : '-'}|${syslogTcpUp ? syslogTcpPort : '-'}`,
@@ -3278,25 +3278,25 @@ function renderServerSelfMonitorBadges(data = null, errorMessage = '', firewallP
       `Syslog listeners UDP:${syslogUdpUp ? syslogUdpPort : 'down'} TCP:${syslogTcpUp ? syslogTcpPort : 'down'}`
     ),
     serverHealthBadgeHtml('NetFlow Port', netflowTone === 'up' ? String(netflowPort) : 'DOWN', netflowTone, 'NetFlow listener (UDP)'),
-    serverHealthBadgeHtml('FW Check', firewallValue, firewallTone, 'Open port/rules health summary from firewall checker'),
+    protocolActivityBadge('NetFlow Telemetry', telemetry.activeByProtocol?.netflow, telemetry.enabledByProtocol?.netflow),
     snmpTelemetryBadge,
     protocolActivityBadge('Syslog Telemetry', telemetry.activeByProtocol?.syslog, telemetry.enabledByProtocol?.syslog),
-    protocolActivityBadge('NetFlow Telemetry', telemetry.activeByProtocol?.netflow, telemetry.enabledByProtocol?.netflow),
+    serverHealthBadgeHtml('FW Check', firewallValue, firewallTone, 'Open port/rules health summary from firewall checker'),
     serverHealthBadgeHtml('Alerting', alertingValue, alertingTone, silenceActive ? 'Alerts are temporarily muted' : 'Alerts active'),
-    serverHealthBadgeHtml('Backup', backupValue, backupTone, `Last backup ${formatMaybeDate(lastBackupAt)}`),
+    serverHealthBadgeHtml(
+      'Inventory',
+      `${Math.max(0, Number(telemetry.sites || 0))}S/${Math.max(0, Number(telemetry.devices || 0))}D`,
+      Number(telemetry.sites || 0) > 0 ? 'up' : 'warn',
+      'Configured sites/devices'
+    ),
     serverHealthBadgeHtml(
       'Heap',
       Number.isFinite(heapPct) ? `${heapPct}%` : 'n/a',
       heapTone,
       `Heap ${formatBytes(heapUsedBytes)} / ${formatBytes(heapTotalBytes)}`
     ),
-    serverHealthBadgeHtml('Refresh', refreshValue, refreshTone, `Global refresh interval ${String(runtime.globalDataRefreshMs || 'n/a')} ms`),
-    serverHealthBadgeHtml(
-      'Inventory',
-      `${Math.max(0, Number(telemetry.sites || 0))}S/${Math.max(0, Number(telemetry.devices || 0))}D`,
-      Number(telemetry.sites || 0) > 0 ? 'up' : 'warn',
-      'Configured sites/devices'
-    )
+    serverHealthBadgeHtml('TEAMS', teamsValue, teamsTone, teamsTitle),
+    serverHealthBadgeHtml('Backup', backupValue, backupTone, `Last backup ${formatMaybeDate(lastBackupAt)}`)
   ];
 
   serverSelfMonitorBadges.innerHTML = badges.join('');

@@ -4965,7 +4965,6 @@ function siteTile(site) {
         `}
       </div>
     </article>
-    ${lanLinkMonitorCard(site, metrics)}
   `;
 }
 
@@ -5003,11 +5002,17 @@ function lanLinkMonitorCard(site, metrics) {
     </tr>`;
   }).join('');
 
+  const hasData = totalCount > 0;
   return `
-    <article class="site-tile lan-link-card" data-site-id="${escapeHtml(site.id)}">
+    <article class="site-tile lan-link-card${hasData ? '' : ' is-device-down'}" data-site-id="${escapeHtml(site.id)}">
+      <div class="site-top">
+        <div class="site-details">
+          <span class="lan-links-badge${hasData ? '' : ' down'}">LAN LINKS</span>
+        </div>
+      </div>
       <h4 class="metric-card-head">
         <span>LAN LINK MONITOR — ${escapeHtml(site.name)}</span>
-        <span class="signal-flow-chip metric-head-flow ${totalCount > 0 ? 'flow-on' : 'flow-off'}">${totalCount > 0 ? `${upCount} UP / ${downCount} DN` : 'NO DATA'}</span>
+        <span class="signal-flow-chip metric-head-flow ${hasData ? 'flow-on' : 'flow-off'}">${hasData ? `${upCount} UP / ${downCount} DN` : 'NO DATA'}</span>
       </h4>
       ${totalCount > 0
         ? `
@@ -5062,6 +5067,7 @@ function renderTiles() {
           </div>
           <div class="tile-grid">
             ${sectionSites.length ? sectionSites.map(siteTile).join('') : '<p class="empty">No devices configured.</p>'}
+            ${sectionSites.map(s => lanLinkMonitorCard(s, s.metrics || {})).join('')}
           </div>
         </section>
       `;

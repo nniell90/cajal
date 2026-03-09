@@ -2760,6 +2760,25 @@ button.flow-btn.collector-agent-update-btn:hover {
   background: #102930;
 }
 
+.lan-links-badge {
+  display: inline-block;
+  padding: 0.12rem 0.35rem;
+  border: 1px solid rgba(142, 209, 255, 0.7);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #dff4ff;
+  background: rgba(45, 97, 138, 0.9);
+  text-shadow: none;
+}
+
+.lan-links-badge.down {
+  color: #ffd4d4;
+  border-color: rgba(255, 100, 116, 0.7);
+  background: rgba(160, 40, 50, 0.9);
+}
+
 .meta-toggle.active {
   border-color: rgba(66, 189, 190, 0.6);
   box-shadow: 0 0 0 1px rgba(66, 189, 190, 0.28) inset;

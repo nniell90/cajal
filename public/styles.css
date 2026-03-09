@@ -4584,6 +4584,7 @@ body[data-ui-theme="slate-neon"] .metric-card {
   grid-column: span 2;
   display: flex;
   flex-direction: column;
+  padding: 0.45rem;
 }
 
 .lan-link-table {

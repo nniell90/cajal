@@ -4959,10 +4959,10 @@ function siteTile(site) {
           </div>
         </article>
 
-        ${lanLinkMonitorCard(site, metrics)}
         `}
       </div>
     </article>
+    ${lanLinkMonitorCard(site, metrics)}
   `;
 }
 
@@ -5001,9 +5001,9 @@ function lanLinkMonitorCard(site, metrics) {
   }).join('');
 
   return `
-    <article class="metric-card lan-link-card">
+    <article class="site-tile lan-link-card" data-site-id="${escapeHtml(site.id)}">
       <h4 class="metric-card-head">
-        <span>LAN LINK MONITOR</span>
+        <span>LAN LINK MONITOR — ${escapeHtml(site.name)}</span>
         <span class="signal-flow-chip metric-head-flow ${totalCount > 0 ? 'flow-on' : 'flow-off'}">${totalCount > 0 ? `${upCount} UP / ${downCount} DN` : 'NO DATA'}</span>
       </h4>
       ${totalCount > 0

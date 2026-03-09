@@ -29,7 +29,7 @@ jobs:
             -OutputFile agent/cajal-windows-agent.exe `
             -NoConsole:$false `
             -Title 'Cajal ICBM Windows Agent' `
-            -Version '${{ github.ref_name }}' `
+            -Version ('${{ github.ref_name }}' -replace '^v','') `
             -Description 'Cajal ICBM collector agent for Windows' `
             -Company 'Cajal ICBM' `
             -Product 'Cajal Windows Agent'

@@ -145,18 +145,6 @@ const eventViewerClose = document.getElementById('eventViewerClose');
 const roadmapBtn = document.getElementById('roadmapBtn');
 const roadmapDialog = document.getElementById('roadmapDialog');
 const roadmapClose = document.getElementById('roadmapClose');
-const welcomeDialog = document.getElementById('welcomeDialog');
-const welcomeHelpBtn = document.getElementById('welcomeHelpBtn');
-const welcomeDismissBtn = document.getElementById('welcomeDismissBtn');
-const setupWizardDialog = document.getElementById('setupWizardDialog');
-const wizardStep1 = document.getElementById('wizardStep1');
-const wizardStep2 = document.getElementById('wizardStep2');
-const wizardOrgName = document.getElementById('wizardOrgName');
-const wizardStep1Next = document.getElementById('wizardStep1Next');
-const wizardSkipAll = document.getElementById('wizardSkipAll');
-const wizardSummary = document.getElementById('wizardSummary');
-const wizardFinish = document.getElementById('wizardFinish');
-const wizardGoSettings = document.getElementById('wizardGoSettings');
 const versionCheckSection = document.getElementById('versionCheckSection');
 const auditRefreshBtn = document.getElementById('auditRefreshBtn');
 const auditCloseBtn = document.getElementById('auditCloseBtn');
@@ -435,7 +423,7 @@ function showToast(message) {
     setTimeout(() => {
       toast.hidden = true;
     }, 140);
-  }, 1800);
+  }, 4000);
 }
 
 function normalizeAgentServerUrl(value = '') {
@@ -1223,10 +1211,6 @@ function applyUiTheme(themeName) {
   } catch {
     // ignore storage errors
   }
-}
-
-function loadUiThemePreference() {
-  applyUiTheme(UI_THEME_CLASSIC);
 }
 
 function downloadTextFile(filename, content, mimeType = 'application/json;charset=utf-8') {
@@ -5163,14 +5147,12 @@ async function initialize() {
       const health = await getJson('/api/health');
       if (health?.version) {
         updateTopbarVersion(health.version);
-        maybeShowWelcomeDialog(health.version);
       }
     } catch {
       // Version display degrades gracefully
     }
     await loadAlertSilenceState();
     await loadAdminSections();
-    maybeShowSetupWizard();
     await loadDashboard();
   } catch (err) {
     setNotice(err.message);
@@ -7673,87 +7655,6 @@ addLocationForm?.addEventListener('submit', async (event) => {
   }
 });
 
-// ── Welcome dialog ────────────────────────────────────────────────────────────
-let appVersion = '';
-
-function maybeShowWelcomeDialog(version) {
-  appVersion = String(version || '');
-  // Disabled — no first-time popups on fresh install
-  return;
-}
-
-function dismissWelcomeDialog() {
-  const key = `cajal_welcomed_v${appVersion || 'default'}`;
-  localStorage.setItem(key, '1');
-  welcomeDialog?.close();
-}
-
-welcomeHelpBtn?.addEventListener('click', () => {
-  dismissWelcomeDialog();
-  window.open('/help.html', '_blank', 'noopener,noreferrer');
-});
-
-welcomeDismissBtn?.addEventListener('click', () => {
-  dismissWelcomeDialog();
-});
-
-// ── Setup wizard ──────────────────────────────────────────────────────────────
-
-async function markWizardComplete() {
-  try {
-    await getJson('/api/settings/runtime', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ setupWizardCompleted: true })
-    });
-  } catch {
-    // Non-fatal — wizard won't reappear if server is unreachable anyway
-  }
-}
-
-function maybeShowSetupWizard() {
-  // Disabled — fresh installs start clean; admins configure via Settings panel
-  return;
-}
-
-wizardStep1Next?.addEventListener('click', async () => {
-  const orgName = wizardOrgName?.value?.trim();
-  if (orgName) {
-    try {
-      locationSettingsState = normalizeLocationSettings(
-        await getJson('/api/settings/locations', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyName: orgName })
-        })
-      );
-      renderLocationTitles();
-      if (wizardSummary) {
-        wizardSummary.textContent = `Organization name set to "${orgName}". You can configure notifications, alerts, and advanced options in the Settings panel at any time.`;
-      }
-    } catch {
-      // Non-fatal — proceed to step 2 regardless
-    }
-  }
-  await markWizardComplete();
-  if (wizardStep1) wizardStep1.hidden = true;
-  if (wizardStep2) wizardStep2.hidden = false;
-});
-
-wizardSkipAll?.addEventListener('click', async () => {
-  await markWizardComplete();
-  setupWizardDialog?.close();
-});
-
-wizardFinish?.addEventListener('click', () => {
-  setupWizardDialog?.close();
-});
-
-wizardGoSettings?.addEventListener('click', () => {
-  setupWizardDialog?.close();
-  if (settingsPanel) settingsPanel.hidden = false;
-});
-
 // ── Version check + update ────────────────────────────────────────────────────
 let versionCheckResult = null;
 let updateInProgress = false;
@@ -7878,5 +7779,4 @@ function updateTopbarVersion(version) {
   if (label && version) label.textContent = `Version ${version}`;
 }
 
-loadUiThemePreference();
 initialize();

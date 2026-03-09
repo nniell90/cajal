@@ -559,17 +559,6 @@
       </form>
     </dialog>
 
-    <dialog id="deleteDeviceDialog" class="local-auth-dialog">
-      <form id="deleteDeviceForm" method="dialog" class="local-auth-form">
-        <h3>Delete Device</h3>
-        <p id="deleteDeviceMsg">Delete this device?</p>
-        <div class="local-auth-actions">
-          <button id="deleteDeviceConfirm" type="submit">Delete</button>
-          <button id="deleteDeviceCancel" type="button" class="ghost-btn">Cancel</button>
-        </div>
-      </form>
-    </dialog>
-
     <dialog id="deleteUserDialog" class="local-auth-dialog">
       <form id="deleteUserForm" method="dialog" class="local-auth-form">
         <h3>Delete User</h3>
@@ -682,48 +671,6 @@
     </dialog>
 
     <div id="toast" class="toast" hidden></div>
-
-    <dialog id="welcomeDialog" class="local-auth-dialog welcome-dialog">
-      <form method="dialog" class="local-auth-form welcome-form">
-        <h3>Welcome to Cajal ICBM</h3>
-        <p class="welcome-tagline">Internal Connectivity &amp; Bandwidth Monitor</p>
-        <p class="welcome-body">Monitor your edge devices, track WAN health, collect syslog and NetFlow telemetry, and receive instant alerts when something goes wrong.</p>
-        <p class="welcome-hint">You may want to start here:</p>
-        <div class="local-auth-actions">
-          <button id="welcomeHelpBtn" type="button">Open Help Guide</button>
-          <button id="welcomeDismissBtn" type="button" class="ghost-btn">Got it</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="setupWizardDialog" class="local-auth-dialog setup-wizard-dialog">
-      <form method="dialog" class="local-auth-form setup-wizard-form">
-
-        <div id="wizardStep1" class="wizard-step">
-          <p class="wizard-step-indicator">Step 1 of 2</p>
-          <h3>Welcome — let's get you set up</h3>
-          <p class="wizard-body">What is your organization's name? This appears throughout the interface.</p>
-          <label>Organization name
-            <input id="wizardOrgName" type="text" placeholder="My Organization" autocomplete="organization" />
-          </label>
-          <div class="local-auth-actions wizard-actions">
-            <button id="wizardStep1Next" type="button">Next</button>
-            <button id="wizardSkipAll" type="button" class="ghost-btn">Skip setup</button>
-          </div>
-        </div>
-
-        <div id="wizardStep2" class="wizard-step" hidden>
-          <p class="wizard-step-indicator">Step 2 of 2</p>
-          <h3>You're all set!</h3>
-          <p id="wizardSummary" class="wizard-body">Setup complete. You can configure notifications, alerts, and advanced options in the Settings panel at any time.</p>
-          <div class="local-auth-actions wizard-actions">
-            <button id="wizardFinish" type="button">Go to Dashboard</button>
-            <button id="wizardGoSettings" type="button" class="ghost-btn">Open Settings</button>
-          </div>
-        </div>
-
-      </form>
-    </dialog>
 
     <script src="/app.js" defer></script>
   </body>

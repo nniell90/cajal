@@ -119,12 +119,11 @@ test('router enforces rate limit on update/apply before calling Watchtower', () 
   assert.ok(rateLimitPos < watchtowerPos, 'rate limit check must precede Watchtower call');
 });
 
-test('welcome dialog is present with correct structure and dismiss/help controls', () => {
+test('dead welcome dialog code has been removed', () => {
   const html = readFile('public/index.html');
-  assert.match(html, /id="welcomeDialog"/);
-  assert.match(html, /id="welcomeHelpBtn"/);
-  assert.match(html, /id="welcomeDismissBtn"/);
-  assert.match(html, /Welcome to Cajal ICBM/);
+  assert.ok(!html.includes('id="welcomeDialog"'), 'welcomeDialog should be removed');
+  const js = readFile('public/app.js');
+  assert.ok(!js.includes('function maybeShowWelcomeDialog'), 'maybeShowWelcomeDialog should be removed');
 });
 
 test('system health panel includes version check section placeholder', () => {
@@ -132,10 +131,8 @@ test('system health panel includes version check section placeholder', () => {
   assert.match(html, /id="versionCheckSection"/);
 });
 
-test('app.js includes welcome dialog and version check functions', () => {
+test('app.js includes version check functions', () => {
   const js = readFile('public/app.js');
-  assert.match(js, /function maybeShowWelcomeDialog/);
-  assert.match(js, /function dismissWelcomeDialog/);
   assert.match(js, /function checkForUpdates/);
   assert.match(js, /function applyUpdate/);
   assert.match(js, /function renderVersionCheckSection/);
@@ -164,22 +161,11 @@ test('factory reset does not use native window.prompt', () => {
   assert.ok(fnBody.includes('typeToConfirm'), 'factory reset must use typeToConfirm in-app dialog');
 });
 
-test('setup wizard dialog is present with correct structure', () => {
+test('dead setup wizard code has been removed', () => {
   const html = readFile('public/index.html');
-  assert.match(html, /id="setupWizardDialog"/);
-  assert.match(html, /id="wizardStep1"/);
-  assert.match(html, /id="wizardStep2"/);
-  assert.match(html, /id="wizardOrgName"/);
-  assert.match(html, /id="wizardStep1Next"/);
-  assert.match(html, /id="wizardSkipAll"/);
-  assert.match(html, /id="wizardFinish"/);
-});
-
-test('app.js includes setup wizard functions and state', () => {
+  assert.ok(!html.includes('id="setupWizardDialog"'), 'setupWizardDialog should be removed');
   const js = readFile('public/app.js');
-  assert.match(js, /function maybeShowSetupWizard/);
-  assert.match(js, /function markWizardComplete/);
-  assert.match(js, /setupWizardCompleted/);
+  assert.ok(!js.includes('function maybeShowSetupWizard'), 'maybeShowSetupWizard should be removed');
 });
 
 // ── Install / update flow regression tests ─────────────────────────────────
@@ -484,13 +470,17 @@ test('consumeSetupToken removes the token from localSetupState', () => {
 // ── SNMP credentials not in process args for v3 ──────────────────────────────
 test('SNMPv3 credentials use config file instead of CLI args', () => {
   const monSrc = readFile('lib/monitoring.js');
-  const snmpStart = monSrc.indexOf('function runSnmpGet');
-  assert.ok(snmpStart >= 0, 'runSnmpGet must exist');
-  const snmpBlock = monSrc.substring(snmpStart, snmpStart + 2200);
+  // The shared SNMP setup lives in buildSnmpExecContext; runSnmpGet/runSnmpWalk delegate to it.
+  const helperStart = monSrc.indexOf('function buildSnmpExecContext');
+  assert.ok(helperStart >= 0, 'buildSnmpExecContext helper must exist');
+  const snmpBlock = monSrc.substring(helperStart, helperStart + 2200);
   assert.ok(snmpBlock.includes('SNMPCONFPATH'), 'SNMPv3 must use SNMPCONFPATH for credentials');
   assert.ok(snmpBlock.includes('snmp.conf'), 'SNMPv3 must write a temporary snmp.conf file');
   assert.ok(snmpBlock.includes('mode: 0o600') || snmpBlock.includes('0o600'), 'snmp.conf must have restricted permissions');
   assert.ok(snmpBlock.includes('rmSync') || snmpBlock.includes('unlinkSync'), 'temporary config must be cleaned up after use');
+  // Verify both consumers still exist
+  assert.ok(monSrc.includes('function runSnmpGet'), 'runSnmpGet must exist');
+  assert.ok(monSrc.includes('function runSnmpWalk'), 'runSnmpWalk must exist');
 });
 
 // ── headersTimeout > requestTimeout ──────────────────────────────────────────
@@ -631,14 +621,9 @@ test('index.html guards rendering until auth check completes', () => {
   assert.ok(indexSrc.includes("window.location.replace('/login.html')"), 'must redirect to login.html if unauthenticated');
 });
 
-test('welcome dialog and setup wizard are disabled', () => {
-  const appSrc = readFile('public/app.js');
-  const welcomeFn = appSrc.match(/function maybeShowWelcomeDialog[\s\S]*?\n\}/);
-  assert.ok(welcomeFn, 'maybeShowWelcomeDialog must exist');
-  assert.ok(!welcomeFn[0].includes('showModal'), 'welcome dialog must not call showModal');
-  const wizardFn = appSrc.match(/function maybeShowSetupWizard[\s\S]*?\n\}/);
-  assert.ok(wizardFn, 'maybeShowSetupWizard must exist');
-  assert.ok(!wizardFn[0].includes('showModal'), 'setup wizard must not call showModal');
+test('dead deleteDeviceDialog has been removed', () => {
+  const html = readFile('public/index.html');
+  assert.ok(!html.includes('id="deleteDeviceDialog"'), 'deleteDeviceDialog should be removed');
 });
 
 test('SNMP interface metrics structure includes interface fields', () => {

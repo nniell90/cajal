@@ -1,5 +1,4 @@
 const locationPanels = document.getElementById('locationPanels');
-const customerFilter = document.getElementById('customerFilter');
 const refreshClock = document.getElementById('refreshClock');
 const systemClock = document.getElementById('systemClock');
 const systemUptime = document.getElementById('systemUptime');
@@ -8,7 +7,6 @@ const changeTickerWrap = document.querySelector('.change-ticker');
 const topbar = document.querySelector('.topbar');
 const settingsBtn = document.getElementById('settingsBtn');
 const helpBtn = document.getElementById('helpBtn');
-const uiThemeSelect = document.getElementById('uiThemeSelect');
 const settingsPanel = document.getElementById('settingsPanel');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const ssoStatusLine = document.getElementById('ssoStatusLine');
@@ -31,9 +29,6 @@ const serverSelfMonitorBadges = document.getElementById('serverSelfMonitorBadges
 const silenceAlertsBtn = document.getElementById('silenceAlertsBtn');
 const globalUndoBtn = document.getElementById('globalUndoBtn');
 const silenceAlertsCountdown = document.getElementById('silenceAlertsCountdown');
-const internalTitle = document.getElementById('internalTitle');
-const customerTitle = document.getElementById('customerTitle');
-const customerFilterLabel = document.getElementById('customerFilterLabel');
 const sslConfigPanel = document.getElementById('sslConfigPanel');
 const sslConfigForm = document.getElementById('sslConfigForm');
 const sslConfigMsg = document.getElementById('sslConfigMsg');
@@ -126,11 +121,8 @@ const windowsAgentPackageMsg = document.getElementById('windowsAgentPackageMsg')
 const mySecurityPanel = document.getElementById('mySecurityPanel');
 const mySecurityMsg = document.getElementById('mySecurityMsg');
 const resetOwnTotpBtn = document.getElementById('resetOwnTotpBtn');
-const settingsAuthModeBadge = document.getElementById('settingsAuthModeBadge');
 const topRoleBadge = document.getElementById('topRoleBadge');
 const authActionBtn = document.getElementById('authActionBtn');
-const internalPanel = document.getElementById('internalPanel');
-const customerPanel = document.getElementById('customerPanel');
 const addLocationBtn = document.getElementById('addLocationBtn');
 const auditTrailBtn = document.getElementById('auditTrailBtn');
 const eventViewerBtn = document.getElementById('eventViewerBtn');
@@ -222,8 +214,6 @@ const linuxAgentSubmit = document.getElementById('linuxAgentSubmit');
 const toast = document.getElementById('toast');
 const DEFAULT_AUTO_REFRESH_MS = 60 * 1000;
 const SSO_MASK = '********';
-const UI_THEME_STORAGE_KEY = 'cajal_ui_theme';
-const UI_THEME_CLASSIC = 'classic';
 const UPTIME_SCALE_OPTIONS = [
   { id: '1h', label: '1 Hour', windowMs: 60 * 60 * 1000, bins: 24, agoLabel: '1h ago' },
   { id: '6h', label: '6 Hours', windowMs: 6 * 60 * 60 * 1000, bins: 24, agoLabel: '6h ago' },
@@ -237,7 +227,6 @@ const DEFAULT_UPTIME_SCALE_ID = '1h';
 
 let sites = [];
 let activeEditor = null;
-let selectedCustomerSiteId = '';
 let activeMetaEditorSiteId = null;
 const dirtyMetaSites = new Set();
 const uptimeScaleBySite = new Map();
@@ -722,17 +711,20 @@ function resolveDownloadFilename(contentDisposition = '', fallback = 'download.b
   return fallback;
 }
 
-async function setupLinuxCollectorAgent(siteId = '') {
+async function setupCollectorAgent(siteId = '', platform = 'linux') {
   const id = String(siteId || '').trim();
   if (!id) throw new Error('Missing site id');
   const site = sites.find((row) => row.id === id);
   if (!site) throw new Error('Site not found');
 
-  const setup = await askLinuxAgentSetup(site);
+  const isWindows = platform === 'windows';
+  const platformLabel = isWindows ? 'Windows' : 'Linux';
+
+  const setup = isWindows ? await askLinuxAgentSetup(site, 'Windows') : await askLinuxAgentSetup(site);
   if (!setup) return { cancelled: true };
   const setupSiteId = String(setup.siteId || '').trim();
   if (!setupSiteId || setupSiteId !== id) {
-    throw new Error('Collector site id mismatch. Re-open Linux Agent setup.');
+    throw new Error(`Collector site id mismatch. Re-open ${platformLabel} Agent setup.`);
   }
   const password = String(setup.password || '');
   const serverUrl = normalizeAgentServerUrl(setup.serverUrl || window.location.origin);
@@ -745,48 +737,116 @@ async function setupLinuxCollectorAgent(siteId = '') {
     body: JSON.stringify({ password })
   });
 
-  const packageEndpoint = '/api/agent/linux/download?format=deb';
-  const packageRes = await fetch(packageEndpoint, { cache: 'no-store' });
-  if (!packageRes.ok) {
-    let detail = '';
-    try {
-      const payload = await packageRes.json();
-      detail = payload?.error || '';
-    } catch {
-      detail = '';
+  let packageFilename;
+  let selectedDownload = null;
+  if (isWindows) {
+    const downloadAttempts = [
+      { format: 'exe', fallbackName: 'cajal-windows-agent.exe' },
+      { format: 'ps1', fallbackName: 'cajal-windows-agent.ps1' }
+    ];
+    let selectedResponse = null;
+    for (const attempt of downloadAttempts) {
+      const endpoint = `/api/agent/windows/download?format=${attempt.format}`;
+      const response = await fetch(endpoint, { cache: 'no-store' });
+      if (response.ok) {
+        selectedDownload = attempt;
+        selectedResponse = response;
+        break;
+      }
+      if (attempt.format === 'exe' && response.status === 404) {
+        continue;
+      }
+      let detail = '';
+      try {
+        const payload = await response.json();
+        detail = payload?.error || '';
+      } catch {
+        detail = '';
+      }
+      throw new Error(detail || `Failed to download Windows agent package (${response.status})`);
     }
-    throw new Error(detail || `Failed to download Linux agent package (${packageRes.status})`);
-  }
-  const packageBlob = await packageRes.blob();
-  if (!packageBlob || !Number(packageBlob.size || 0)) {
-    throw new Error('Linux agent package download returned empty content');
-  }
-  const packageFilename = resolveDownloadFilename(packageRes.headers.get('content-disposition'), 'cajal-agent.deb');
-  downloadBlobFile(packageFilename, packageBlob);
 
-  const installSteps = buildCollectorEnrollCommands({
-    siteId: id,
-    serverUrl,
-    packageFilename
-  });
-  installSteps.push('Use the same password from this dialog when prompted.');
+    if (!selectedDownload || !selectedResponse) {
+      throw new Error('Windows agent download is unavailable. Upload cajal-windows-agent.exe or use the PowerShell installer.');
+    }
+    const packageBlob = await selectedResponse.blob();
+    if (!packageBlob || !Number(packageBlob.size || 0)) {
+      throw new Error('Windows agent download returned empty content');
+    }
+    packageFilename = resolveDownloadFilename(
+      selectedResponse.headers.get('content-disposition'),
+      selectedDownload.fallbackName
+    );
+    downloadBlobFile(packageFilename, packageBlob);
+  } else {
+    const packageEndpoint = '/api/agent/linux/download?format=deb';
+    const packageRes = await fetch(packageEndpoint, { cache: 'no-store' });
+    if (!packageRes.ok) {
+      let detail = '';
+      try {
+        const payload = await packageRes.json();
+        detail = payload?.error || '';
+      } catch {
+        detail = '';
+      }
+      throw new Error(detail || `Failed to download Linux agent package (${packageRes.status})`);
+    }
+    const packageBlob = await packageRes.blob();
+    if (!packageBlob || !Number(packageBlob.size || 0)) {
+      throw new Error('Linux agent package download returned empty content');
+    }
+    packageFilename = resolveDownloadFilename(packageRes.headers.get('content-disposition'), 'cajal-agent.deb');
+    downloadBlobFile(packageFilename, packageBlob);
+  }
+
+  let installSteps;
+  if (isWindows) {
+    installSteps = buildWindowsCollectorEnrollCommands({
+      siteId: id,
+      serverUrl,
+      downloadFilename: packageFilename,
+      downloadFormat: selectedDownload.format
+    });
+    installSteps.push(`Use the same password from this dialog when prompted by -Password (${selectedDownload.format.toUpperCase()}).`);
+  } else {
+    installSteps = buildCollectorEnrollCommands({
+      siteId: id,
+      serverUrl,
+      packageFilename
+    });
+    installSteps.push('Use the same password from this dialog when prompted.');
+  }
+
   const stepText = installSteps.join('\n');
   if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     navigator.clipboard.writeText(stepText).catch(() => {});
   }
 
+  const terminalLines = isWindows
+    ? [
+        `Windows agent bootstrap configured for ${site.name}.`,
+        selectedDownload.format === 'exe'
+          ? 'Installer type: native .exe package.'
+          : 'Installer type: PowerShell script fallback (.ps1).',
+        `Server URL: ${serverUrl}`,
+        'Run on Windows collector host:',
+        ...installSteps
+      ]
+    : [
+        `Linux agent bootstrap configured for ${site.name}.`,
+        `Server URL: ${serverUrl}`,
+        'Run on collector host:',
+        ...installSteps
+      ];
+
   const term = getCollectorToolsTerminalState(id, TERMINAL_SCOPE_AGENT);
-  appendCollectorToolsLines(id, [
-    `Linux agent bootstrap configured for ${site.name}.`,
-    `Server URL: ${serverUrl}`,
-    'Run on collector host:',
-    ...installSteps
-  ], TERMINAL_SCOPE_AGENT);
+  appendCollectorToolsLines(id, terminalLines, TERMINAL_SCOPE_AGENT);
   term.pending = false;
   renderTiles();
   queueCollectorToolsTerminalScroll(id, TERMINAL_SCOPE_AGENT);
 
-  const apiSteps = Array.isArray(bootstrap?.linux?.installSteps) ? bootstrap.linux.installSteps : [];
+  const apiKey = isWindows ? 'windows' : 'linux';
+  const apiSteps = Array.isArray(bootstrap?.[apiKey]?.installSteps) ? bootstrap[apiKey].installSteps : [];
   return {
     ok: true,
     steps: installSteps,
@@ -794,101 +854,12 @@ async function setupLinuxCollectorAgent(siteId = '') {
   };
 }
 
+async function setupLinuxCollectorAgent(siteId = '') {
+  return setupCollectorAgent(siteId, 'linux');
+}
+
 async function setupWindowsCollectorAgent(siteId = '') {
-  const id = String(siteId || '').trim();
-  if (!id) throw new Error('Missing site id');
-  const site = sites.find((row) => row.id === id);
-  if (!site) throw new Error('Site not found');
-
-  const setup = await askLinuxAgentSetup(site, 'Windows');
-  if (!setup) return { cancelled: true };
-  const setupSiteId = String(setup.siteId || '').trim();
-  if (!setupSiteId || setupSiteId !== id) {
-    throw new Error('Collector site id mismatch. Re-open Windows Agent setup.');
-  }
-  const password = String(setup.password || '');
-  const serverUrl = normalizeAgentServerUrl(setup.serverUrl || window.location.origin);
-  if (password.length < 8) throw new Error('Password must be at least 8 characters');
-  if (!isValidAgentServerUrl(serverUrl)) throw new Error('Cajal URL must start with http:// or https://');
-
-  const bootstrap = await getJson(`/api/sites/${encodeURIComponent(id)}/collector/agent/password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password })
-  });
-
-  const downloadAttempts = [
-    { format: 'exe', fallbackName: 'cajal-windows-agent.exe' },
-    { format: 'ps1', fallbackName: 'cajal-windows-agent.ps1' }
-  ];
-  let selectedDownload = null;
-  let selectedResponse = null;
-  for (const attempt of downloadAttempts) {
-    const endpoint = `/api/agent/windows/download?format=${attempt.format}`;
-    const response = await fetch(endpoint, { cache: 'no-store' });
-    if (response.ok) {
-      selectedDownload = attempt;
-      selectedResponse = response;
-      break;
-    }
-    if (attempt.format === 'exe' && response.status === 404) {
-      continue;
-    }
-    let detail = '';
-    try {
-      const payload = await response.json();
-      detail = payload?.error || '';
-    } catch {
-      detail = '';
-    }
-    throw new Error(detail || `Failed to download Windows agent package (${response.status})`);
-  }
-
-  if (!selectedDownload || !selectedResponse) {
-    throw new Error('Windows agent download is unavailable. Upload cajal-windows-agent.exe or use the PowerShell installer.');
-  }
-  const packageBlob = await selectedResponse.blob();
-  if (!packageBlob || !Number(packageBlob.size || 0)) {
-    throw new Error('Windows agent download returned empty content');
-  }
-  const packageFilename = resolveDownloadFilename(
-    selectedResponse.headers.get('content-disposition'),
-    selectedDownload.fallbackName
-  );
-  downloadBlobFile(packageFilename, packageBlob);
-
-  const installSteps = buildWindowsCollectorEnrollCommands({
-    siteId: id,
-    serverUrl,
-    downloadFilename: packageFilename,
-    downloadFormat: selectedDownload.format
-  });
-  installSteps.push(`Use the same password from this dialog when prompted by -Password (${selectedDownload.format.toUpperCase()}).`);
-  const stepText = installSteps.join('\n');
-  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    navigator.clipboard.writeText(stepText).catch(() => {});
-  }
-
-  const term = getCollectorToolsTerminalState(id, TERMINAL_SCOPE_AGENT);
-  appendCollectorToolsLines(id, [
-    `Windows agent bootstrap configured for ${site.name}.`,
-    selectedDownload.format === 'exe'
-      ? 'Installer type: native .exe package.'
-      : 'Installer type: PowerShell script fallback (.ps1).',
-    `Server URL: ${serverUrl}`,
-    'Run on Windows collector host:',
-    ...installSteps
-  ], TERMINAL_SCOPE_AGENT);
-  term.pending = false;
-  renderTiles();
-  queueCollectorToolsTerminalScroll(id, TERMINAL_SCOPE_AGENT);
-
-  const apiSteps = Array.isArray(bootstrap?.windows?.installSteps) ? bootstrap.windows.installSteps : [];
-  return {
-    ok: true,
-    steps: installSteps,
-    apiSteps
-  };
+  return setupCollectorAgent(siteId, 'windows');
 }
 
 function getCollectorToolsTerminalState(siteId = '', scope = TERMINAL_SCOPE_CAJAL) {
@@ -1202,17 +1173,6 @@ function completeToolsTerminalInput(rawValue = '', siteId = '', scope = TERMINAL
   return { changed: false, value: raw, options };
 }
 
-function applyUiTheme(themeName) {
-  const next = UI_THEME_CLASSIC;
-  document.body.dataset.uiTheme = next;
-  if (uiThemeSelect) uiThemeSelect.value = next;
-  try {
-    localStorage.setItem(UI_THEME_STORAGE_KEY, next);
-  } catch {
-    // ignore storage errors
-  }
-}
-
 function downloadTextFile(filename, content, mimeType = 'application/json;charset=utf-8') {
   const blob = new Blob([String(content || '')], { type: String(mimeType || 'text/plain;charset=utf-8') });
   const href = URL.createObjectURL(blob);
@@ -1473,9 +1433,6 @@ function populateLocationForm(config = {}) {
 function renderLocationTitles() {
   const normalized = normalizeLocationSettings(locationSettingsState);
   if (companyNameDisplay) companyNameDisplay.textContent = normalized.companyName;
-  if (internalTitle) internalTitle.textContent = normalized.internalName;
-  if (customerTitle) customerTitle.textContent = normalized.customerName;
-  if (customerFilterLabel) customerFilterLabel.textContent = normalized.customerName;
   renderLocationSectionAdmin();
 }
 
@@ -1600,7 +1557,7 @@ function renderPublicServiceBadges() {
       if (checkedAt) titleParts.push(`checked=${formatMaybeDate(checkedAt)}`);
       if (latencyText) titleParts.push(`latency=${latencyText.trim()}`);
       if (serviceId === 'internal-dns') {
-        const editable = canManage();
+        const editable = canAdmin();
         const title = editable
           ? `${titleParts.join(' | ')} | click to edit target`
           : titleParts.join(' | ');
@@ -1657,10 +1614,6 @@ function normalizeAccessRole(role) {
   return 'monitor';
 }
 
-function canManage() {
-  return canAdmin();
-}
-
 function canAdmin() {
   return normalizeAccessRole(authState.user?.role) === 'admin';
 }
@@ -1670,11 +1623,6 @@ function applyAuthUi() {
   const roleLabel = normalizeAccessRole(user.role);
   const useSso = user.authenticated ? user.provider === 'entra' : Boolean(authState.config?.enabled);
   const admin = canAdmin();
-  if (settingsAuthModeBadge) {
-    settingsAuthModeBadge.hidden = !admin;
-    settingsAuthModeBadge.textContent = useSso ? 'SSO ON' : 'LOCAL LOGIN';
-    settingsAuthModeBadge.className = `auth-mode-badge ${useSso ? 'sso' : 'local'}`;
-  }
   if (topRoleBadge) {
     topRoleBadge.textContent = roleLabel;
     topRoleBadge.className = `top-role-badge ${roleLabel}`;
@@ -1719,8 +1667,6 @@ function applyAuthUi() {
   if (storagePanel) storagePanel.hidden = !admin;
   if (apiAccessPanel) apiAccessPanel.hidden = !admin;
   if (locationAdminPanel) locationAdminPanel.hidden = !admin;
-  if (internalPanel) internalPanel.hidden = false;
-  if (customerPanel) customerPanel.hidden = false;
   if (userAdminPanel) userAdminPanel.hidden = !admin;
   if (mySecurityPanel) mySecurityPanel.hidden = admin;
   if (!admin) setRawTelemetryAutoRefresh(false);
@@ -2733,25 +2679,29 @@ function renderManagedUsers() {
     .join('');
 }
 
-async function loadManagedUsers() {
+async function loadAdminSettings(url, populateFn, msgEl, onErrorFn) {
   if (!canAdmin()) return;
   try {
-    managedUsers = await getJson('/api/users');
-    renderManagedUsers();
+    const data = await getJson(url);
+    populateFn(data);
   } catch (err) {
-    if (userAdminMsg) userAdminMsg.textContent = err.message;
+    if (msgEl) msgEl.textContent = err.message;
+    if (typeof onErrorFn === 'function') onErrorFn(err);
   }
 }
 
+async function loadManagedUsers() {
+  return loadAdminSettings('/api/users', (data) => {
+    managedUsers = data;
+    renderManagedUsers();
+  }, userAdminMsg);
+}
+
 async function loadSsoSettings() {
-  if (!canAdmin()) return;
-  try {
-    const config = await getJson('/api/settings/sso');
+  return loadAdminSettings('/api/settings/sso', (config) => {
     ssoConfigState = cloneForUndo(config) || {};
     populateSsoForm(ssoConfigState);
-  } catch (err) {
-    if (ssoConfigMsg) ssoConfigMsg.textContent = err.message;
-  }
+  }, ssoConfigMsg);
 }
 
 async function loadRuntimeSettings() {
@@ -2917,15 +2867,12 @@ function renderWebhookRoutingSettings() {
 }
 
 async function loadWebhookRoutingSettings() {
-  if (!canAdmin()) return;
-  try {
-    const payload = await getJson('/api/settings/webhook-routing');
+  return loadAdminSettings('/api/settings/webhook-routing', (payload) => {
     webhookRoutingState = normalizeWebhookRoutingState(payload);
     renderWebhookRoutingSettings();
-  } catch (err) {
-    if (webhookRoutingMsg) webhookRoutingMsg.textContent = err.message;
+  }, webhookRoutingMsg, () => {
     if (webhookRoutingContent) webhookRoutingContent.innerHTML = '<p class="empty">Failed to load webhook routing.</p>';
-  }
+  });
 }
 
 function normalizeApiTokenState(payload = {}) {
@@ -3049,13 +2996,10 @@ async function fileToBase64(file) {
 }
 
 async function loadSslSettings() {
-  if (!canAdmin()) return;
-  try {
-    sslConfigState = await getJson('/api/settings/ssl');
+  return loadAdminSettings('/api/settings/ssl', (data) => {
+    sslConfigState = data;
     populateSslForm(sslConfigState);
-  } catch (err) {
-    if (sslConfigMsg) sslConfigMsg.textContent = err.message;
-  }
+  }, sslConfigMsg);
 }
 
 async function loadLocationSettings() {
@@ -3606,19 +3550,16 @@ async function loadErrorLogs() {
   }
 }
 
-function formatDiagnosticsEntry(entry = {}) {
-  const ts = formatMaybeDate(entry.ts);
-  const level = String(entry.level || 'info').toUpperCase();
-  const scope = String(entry.scope || 'system');
-  const protocol = String(entry.protocol || '').trim().toUpperCase();
+function formatLogEntry(entry = {}, tagFields = []) {
+  const message = String(entry.message || '').trim();
+  const detail = String(entry.detail || '').trim();
+  const context = entry.context && typeof entry.context === 'object' && Object.keys(entry.context).length
+    ? JSON.stringify(entry.context, null, 2)
+    : '';
+  const tags = tagFields.filter(Boolean).map((t) => `[${t}]`);
   const siteName = String(entry.siteName || entry.siteId || '').trim();
   const sourceIp = String(entry.sourceIp || '').trim();
   const action = String(entry.action || '').trim();
-  const message = String(entry.message || '').trim();
-  const detail = String(entry.detail || '').trim();
-  const context = entry.context && typeof entry.context === 'object' ? JSON.stringify(entry.context, null, 2) : '';
-  const tags = [`[${ts}]`, `[${level}]`, `[${scope}]`];
-  if (protocol) tags.push(`[${protocol}]`);
   if (siteName) tags.push(`[SITE:${siteName}]`);
   if (sourceIp) tags.push(`[SRC:${sourceIp}]`);
   if (action) tags.push(`[ACT:${action}]`);
@@ -3626,6 +3567,14 @@ function formatDiagnosticsEntry(entry = {}) {
   if (detail) lines.push(`detail: ${detail}`);
   if (context) lines.push(`context:\n${context}`);
   return lines.join('\n');
+}
+
+function formatDiagnosticsEntry(entry = {}) {
+  const ts = formatMaybeDate(entry.ts);
+  const level = String(entry.level || 'info').toUpperCase();
+  const scope = String(entry.scope || 'system');
+  const protocol = String(entry.protocol || '').trim().toUpperCase();
+  return formatLogEntry(entry, [ts, level, scope, protocol]);
 }
 
 function renderDiagnosticsLogs(entries = []) {
@@ -3686,23 +3635,7 @@ function formatRawTelemetryEntry(entry = {}) {
   const ts = formatMaybeDate(entry.ts);
   const protocol = String(entry.protocol || 'unknown').toUpperCase();
   const transport = String(entry.transport || '').trim().toUpperCase();
-  const siteName = String(entry.siteName || entry.siteId || '').trim();
-  const sourceIp = String(entry.sourceIp || '').trim();
-  const action = String(entry.action || '').trim();
-  const message = String(entry.message || '').trim();
-  const detail = String(entry.detail || '').trim();
-  const context = entry.context && typeof entry.context === 'object' && Object.keys(entry.context).length
-    ? JSON.stringify(entry.context, null, 2)
-    : '';
-  const tags = [`[${ts}]`, `[${protocol}]`];
-  if (transport) tags.push(`[${transport}]`);
-  if (siteName) tags.push(`[SITE:${siteName}]`);
-  if (sourceIp) tags.push(`[SRC:${sourceIp}]`);
-  if (action) tags.push(`[ACT:${action}]`);
-  const lines = [`${tags.join(' ')} ${message}`.trim()];
-  if (detail) lines.push(`detail: ${detail}`);
-  if (context) lines.push(`context:\n${context}`);
-  return lines.join('\n');
+  return formatLogEntry(entry, [ts, protocol, transport]);
 }
 
 function renderRawTelemetry(entries = []) {
@@ -3777,7 +3710,7 @@ async function loadAlertSilenceState() {
 function flowBadge(site, protocol) {
   const enabled = Boolean(site.telemetry?.[protocol]);
   const isActive = activeEditor?.siteId === site.id && activeEditor?.protocol === protocol;
-  if (!canManage()) {
+  if (!canAdmin()) {
     return `<span class="flow ${enabled ? 'on' : 'off'}">${protocolLabel(protocol)}: ${enabled ? 'Flowing' : 'Off'}</span>`;
   }
 
@@ -3793,55 +3726,11 @@ function flowBadge(site, protocol) {
   `;
 }
 
-function syslogFlowIndicator(site) {
-  const cfg = site?.monitorConfig?.syslog || {};
-  const metrics = site?.metrics?.syslog || {};
-  const enabled = Boolean(cfg.enabled);
-  const flowing = Boolean(site?.telemetry?.syslog);
-  const eps = Math.max(0, Number(metrics.eventsPerSecond || 0));
-
+function protocolFlowIndicator(site, protocol) {
+  const enabled = Boolean(site?.monitorConfig?.[protocol]?.enabled);
+  const flowing = Boolean(site?.telemetry?.[protocol]);
   if (!enabled) {
     return { chipClass: 'disabled', label: 'DISABLED' };
-  }
-  if (flowing && eps > 0) {
-    return { chipClass: 'live', label: 'LIVE' };
-  }
-  if (flowing) {
-    return { chipClass: 'live', label: 'LIVE' };
-  }
-  return { chipClass: 'down', label: 'DOWN' };
-}
-
-function snmpFlowIndicator(site) {
-  const cfg = site?.monitorConfig?.snmp || {};
-  const metrics = site?.metrics?.snmp || {};
-  const enabled = Boolean(cfg.enabled);
-  const flowing = Boolean(site?.telemetry?.snmp);
-  const responseMs = Number(metrics.responseMs || 0);
-
-  if (!enabled) {
-    return { chipClass: 'disabled', label: 'DISABLED' };
-  }
-  if (flowing && responseMs > 0) {
-    return { chipClass: 'live', label: 'LIVE' };
-  }
-  if (flowing) {
-    return { chipClass: 'live', label: 'LIVE' };
-  }
-  return { chipClass: 'down', label: 'DOWN' };
-}
-
-function netflowFlowIndicator(site) {
-  const cfg = site?.monitorConfig?.netflow || {};
-  const metrics = site?.metrics?.netflow || {};
-  const enabled = Boolean(cfg.enabled);
-  const flowing = Boolean(site?.telemetry?.netflow);
-  const talkers = Array.isArray(metrics.topTalkers) ? metrics.topTalkers : [];
-  if (!enabled) {
-    return { chipClass: 'disabled', label: 'DISABLED' };
-  }
-  if (flowing && talkers.length > 0) {
-    return { chipClass: 'live', label: 'LIVE' };
   }
   if (flowing) {
     return { chipClass: 'live', label: 'LIVE' };
@@ -4085,7 +3974,7 @@ function collectorTerminalCard(site, tests = []) {
   const terminal = getCollectorToolsTerminalState(site.id, TERMINAL_SCOPE_AGENT);
   const lines = trimCollectorToolsLines(terminal.lines);
   const inputValue = String(terminal.input ?? '');
-  const editable = canManage();
+  const editable = canAdmin();
   const chain = collectorConnectivityState(site);
 
   return `
@@ -4358,7 +4247,7 @@ function heartbeatPanel(site) {
       <p>Method: <strong>${escapeHtml(method)}</strong></p>
       <p class="heartbeat-target-row">
         <span class="hb-target-badge primary">Target 1</span>
-        ${canManage()
+        ${canAdmin()
           ? `<select class="heartbeat-target-select" data-site-id="${escapeHtml(site.id)}" data-heartbeat-slot="primary">
               ${targetOptions
                 .map((opt) => `<option value="${escapeHtml(opt.value)}" ${opt.value === target ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`)
@@ -4369,7 +4258,7 @@ function heartbeatPanel(site) {
       <p>Last Check-In 1: <strong class="hb-ts">${escapeHtml(lastSeen)}</strong></p>
       <p class="heartbeat-target-row">
         <span class="hb-target-badge secondary">Target 2</span>
-        ${canManage()
+        ${canAdmin()
           ? `<select class="heartbeat-target-select" data-site-id="${escapeHtml(site.id)}" data-heartbeat-slot="secondary">
               ${targetOptions
                 .map((opt) => `<option value="${escapeHtml(opt.value)}" ${opt.value === target2 ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`)
@@ -4387,7 +4276,7 @@ function collectorPanel(site, expanded = false) {
   const terminal = getCollectorToolsTerminalState(site.id, TERMINAL_SCOPE_CAJAL);
   const lines = trimCollectorToolsLines(terminal.lines);
   const inputValue = String(terminal.input ?? '');
-  const editable = canManage();
+  const editable = canAdmin();
   const toggleLabel = 'Close';
   const toggleAria = 'Close terminal';
 
@@ -4580,9 +4469,9 @@ function siteTile(site) {
   const uptimePoints = buildUptimeSeriesFromSamples(metrics.uptimeSamples, uptimeScale, fallbackUptime);
   const fallbackUptimeSecondary = Array.isArray(metrics.uptime14dSecondary) && metrics.uptime14dSecondary.length ? metrics.uptime14dSecondary : fallbackUptime;
   const uptimePointsSecondary = buildUptimeSeriesFromSamples(metrics.uptimeSamplesSecondary, uptimeScale, fallbackUptimeSecondary);
-  const snmpIndicator = snmpFlowIndicator(site);
-  const syslogIndicator = syslogFlowIndicator(site);
-  const netflowIndicator = netflowFlowIndicator(site);
+  const snmpIndicator = protocolFlowIndicator(site, 'snmp');
+  const syslogIndicator = protocolFlowIndicator(site, 'syslog');
+  const netflowIndicator = protocolFlowIndicator(site, 'netflow');
   const heartbeatIndicator = heartbeatFlowIndicator(site);
   const syslogViewActive = activeEditor?.siteId === site.id && activeEditor?.protocol === 'syslog';
   const snmpViewActive = activeEditor?.siteId === site.id && activeEditor?.protocol === 'snmp';
@@ -4627,7 +4516,7 @@ function siteTile(site) {
   }
   const suppressCollectorDownTracer = isCollectorRole && agentTone === 'ok';
   const showDownTracer = isDeviceDown && !suppressCollectorDownTracer;
-  const allowManage = canManage();
+  const allowManage = canAdmin();
   const showMetaEditor = allowManage && activeMetaEditorSiteId === site.id;
   const notifyEditable = allowManage && showMetaEditor;
   const metaFormId = `site-meta-${site.id}`;
@@ -4987,7 +4876,7 @@ function lanLinkMonitorCard(site, metrics) {
   }).join('');
 
   const hasData = totalCount > 0;
-  const allowDelete = canManage();
+  const allowDelete = canAdmin();
   return `
     <article class="site-tile lan-link-card${hasData ? '' : ' is-device-down'}" data-site-id="${escapeHtml(site.id)}">
       <div class="site-top">
@@ -5069,22 +4958,6 @@ function refreshHeartbeatTimers() {
   // Heartbeat panel now displays fixed check-in timestamps for target 1 and target 2.
 }
 
-function populateSiteSelect() {
-  if (!customerFilter) return;
-  const customerSites = sites.filter((site) => site.category === 'customer');
-  const customerOptions = customerSites
-    .map((site) => `<option value="${escapeHtml(site.id)}">${escapeHtml(site.name)}</option>`)
-    .join('');
-
-  customerFilter.innerHTML = '<option value="">All</option>' + customerOptions;
-  if (selectedCustomerSiteId && customerSites.some((site) => site.id === selectedCustomerSiteId)) {
-    customerFilter.value = selectedCustomerSiteId;
-  } else {
-    selectedCustomerSiteId = '';
-    customerFilter.value = '';
-  }
-}
-
 async function loadDashboard(options = {}) {
   const fromGlobalClockRefresh = Boolean(options?.fromGlobalClockRefresh);
   const [siteRows] = await Promise.all([
@@ -5111,7 +4984,6 @@ async function loadDashboard(options = {}) {
       blinkDeviceTilesOnGlobalRefresh();
     }
   }
-  populateSiteSelect();
   renderLocationTitles();
   renderChangeTicker(sites);
   refreshHeartbeatTimers();
@@ -5390,7 +5262,7 @@ internalDnsCancel?.addEventListener('click', () => {
 
 internalDnsForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!canManage()) return;
+  if (!canAdmin()) return;
   const previousRuntime = cloneForUndo(runtimeConfigState) || {};
   const nextTarget = String(internalDnsTargetInput?.value || '').trim();
   if (nextTarget && (nextTarget.length > 255 || !/^[A-Za-z0-9._:-]+$/.test(nextTarget))) {
@@ -5426,10 +5298,6 @@ internalDnsForm?.addEventListener('submit', async (event) => {
   } catch (err) {
     if (internalDnsMsg) internalDnsMsg.textContent = err.message;
   }
-});
-
-uiThemeSelect?.addEventListener('change', () => {
-  applyUiTheme(uiThemeSelect.value);
 });
 
 diagnosticsProtocolFilter?.addEventListener('change', () => {
@@ -5787,7 +5655,7 @@ locationConfigForm?.addEventListener('submit', async (event) => {
       await loadLocationSettings();
       renderTiles();
     }, {
-      flashTargets: ['#companyNameDisplay', '#internalTitle', '#customerTitle', '#locationAdminPanel']
+      flashTargets: ['#companyNameDisplay', '#locationAdminPanel']
     });
     populateLocationForm(locationSettingsState);
     renderLocationTitles();
@@ -6429,11 +6297,6 @@ backupRestoreForm?.addEventListener('submit', async (event) => {
   }
 });
 
-customerFilter?.addEventListener('change', () => {
-  selectedCustomerSiteId = customerFilter.value || '';
-  renderTiles();
-});
-
 document.addEventListener('click', (event) => {
   const saveLocationSectionButton = event.target.closest('.save-location-section');
   if (saveLocationSectionButton) {
@@ -6536,7 +6399,7 @@ document.addEventListener('click', (event) => {
 
   const deleteDeviceButton = event.target.closest('.delete-device');
   if (deleteDeviceButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = String(deleteDeviceButton.dataset.siteId || '').trim();
     const siteName = String(deleteDeviceButton.dataset.siteName || siteId).trim();
     if (!siteId) return;
@@ -6600,7 +6463,7 @@ document.addEventListener('click', (event) => {
 
   const publicServiceEditableBadge = event.target.closest('.public-service-badge-editable');
   if (publicServiceEditableBadge) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const serviceId = String(publicServiceEditableBadge.dataset.serviceId || '').trim().toLowerCase();
     if (serviceId !== 'internal-dns') return;
     const currentTarget = String(publicServiceEditableBadge.dataset.target || '').trim();
@@ -6610,7 +6473,7 @@ document.addEventListener('click', (event) => {
 
   const metaToggle = event.target.closest('.meta-toggle');
   if (metaToggle) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = metaToggle.dataset.siteId || '';
     if (!siteId) return;
     const opening = activeMetaEditorSiteId !== siteId;
@@ -6637,7 +6500,7 @@ document.addEventListener('click', (event) => {
 
   const notifyButton = event.target.closest('.notify-toggle');
   if (notifyButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = notifyButton.dataset.siteId;
     const site = sites.find((s) => s.id === siteId);
     if (!site) return;
@@ -6668,7 +6531,7 @@ document.addEventListener('click', (event) => {
 
   const testNotifyButton = event.target.closest('.test-notify');
   if (testNotifyButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = testNotifyButton.dataset.siteId || '';
     if (!siteId) return;
 
@@ -6691,7 +6554,7 @@ document.addEventListener('click', (event) => {
 
   const agentDownloadPlaceholderButton = event.target.closest('.agent-download-placeholder');
   if (agentDownloadPlaceholderButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = String(agentDownloadPlaceholderButton.dataset.siteId || '').trim();
     const os = String(agentDownloadPlaceholderButton.dataset.agentOs || '').trim().toLowerCase();
     if (!siteId) return;
@@ -6721,7 +6584,7 @@ document.addEventListener('click', (event) => {
 
   const collectorAgentUpdateButton = event.target.closest('.collector-agent-update-btn');
   if (collectorAgentUpdateButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = String(collectorAgentUpdateButton.dataset.siteId || '').trim();
     if (!siteId) return;
     const site = sites.find((row) => String(row?.id || '') === siteId);
@@ -6781,7 +6644,7 @@ document.addEventListener('click', (event) => {
 
   const monitorDiagButton = event.target.closest('.monitor-diagnostic-btn');
   if (monitorDiagButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const editor = monitorDiagButton.closest('.monitor-editor');
     if (!editor) return;
     const msg = editor.querySelector('.monitor-save-msg');
@@ -6821,7 +6684,7 @@ document.addEventListener('click', (event) => {
 
   const snmpTestButton = event.target.closest('.snmp-test-btn');
   if (snmpTestButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const editor = snmpTestButton.closest('.monitor-editor');
     if (!editor) return;
     const msg = editor.querySelector('.monitor-save-msg');
@@ -6860,7 +6723,7 @@ document.addEventListener('click', (event) => {
 
   const syslogTestButton = event.target.closest('.syslog-test-btn');
   if (syslogTestButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const editor = syslogTestButton.closest('.monitor-editor');
     if (!editor) return;
     const msg = editor.querySelector('.monitor-save-msg');
@@ -6899,7 +6762,7 @@ document.addEventListener('click', (event) => {
 
   const netflowTestButton = event.target.closest('.netflow-test-btn');
   if (netflowTestButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const editor = netflowTestButton.closest('.monitor-editor');
     if (!editor) return;
     const msg = editor.querySelector('.monitor-save-msg');
@@ -6945,7 +6808,7 @@ document.addEventListener('click', (event) => {
 
   const metricViewButton = event.target.closest('.metric-view-btn');
   if (metricViewButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const protocol = String(metricViewButton.dataset.protocol || '').trim().toLowerCase();
     if (!['syslog', 'snmp', 'netflow'].includes(protocol)) return;
     openEventViewer({ source: protocol, classId: '', search: '', reload: true })
@@ -6957,7 +6820,7 @@ document.addEventListener('click', (event) => {
 
   const monitorCloseButton = event.target.closest('.monitor-close-btn');
   if (monitorCloseButton) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     activeEditor = null;
     renderTiles();
     return;
@@ -6965,7 +6828,7 @@ document.addEventListener('click', (event) => {
 
   const button = event.target.closest('.flow-btn');
   if (!button) return;
-  if (!canManage()) return;
+  if (!canAdmin()) return;
 
   const siteId = button.dataset.siteId;
   const protocol = button.dataset.protocol;
@@ -6993,7 +6856,7 @@ document.addEventListener('change', async (event) => {
 
   const hbTarget = event.target.closest('.heartbeat-target-select');
   if (hbTarget) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     const siteId = hbTarget.dataset.siteId || '';
     const previousSite = snapshotSiteForUndo(siteId);
     const heartbeatTarget = String(hbTarget.value || '').trim().toLowerCase();
@@ -7034,7 +6897,7 @@ document.addEventListener('change', async (event) => {
 
   const roleSelector = event.target.closest('.role-selector');
   if (!roleSelector) return;
-  if (!canManage()) return;
+  if (!canAdmin()) return;
 
   const siteId = roleSelector.dataset.siteId || '';
   const role = normalizeRole(roleSelector.value);
@@ -7075,7 +6938,7 @@ document.addEventListener('submit', async (event) => {
   const toolsTerminalForm = event.target.closest('.collector-tools-terminal-form');
   if (toolsTerminalForm) {
     event.preventDefault();
-    if (!canManage()) {
+    if (!canAdmin()) {
       setNotice('Admin access required for tools terminal.');
       return;
     }
@@ -7142,7 +7005,7 @@ document.addEventListener('submit', async (event) => {
 
   const metaForm = event.target.closest('.site-meta-form');
 	  if (metaForm) {
-	    if (!canManage()) return;
+	    if (!canAdmin()) return;
 	    event.preventDefault();
 	    const siteId = metaForm.dataset.siteId || '';
 	    const previousSite = snapshotSiteForUndo(siteId);
@@ -7221,7 +7084,7 @@ document.addEventListener('submit', async (event) => {
 
   const notifyForm = event.target.closest('.notify-form');
   if (notifyForm) {
-    if (!canManage()) return;
+    if (!canAdmin()) return;
     event.preventDefault();
     const siteId = notifyForm.dataset.siteId || '';
     const previousSite = snapshotSiteForUndo(siteId);
@@ -7267,7 +7130,7 @@ document.addEventListener('submit', async (event) => {
 
   const editor = event.target.closest('.monitor-editor');
   if (!editor) return;
-  if (!canManage()) return;
+  if (!canAdmin()) return;
 
   event.preventDefault();
 

@@ -2,6 +2,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: cajal-postgres
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: ${CAJAL_DB_NAME:-cajal}
       POSTGRES_USER: ${CAJAL_DB_USER:-cajal}
@@ -18,6 +20,7 @@ services:
   cajal:
     image: ghcr.io/nniell90/cajal:latest
     container_name: cajal-app
+    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
@@ -25,15 +28,10 @@ services:
     environment:
       PORT: 4000
       CAJAL_STORAGE_BACKEND: postgres
-      CAJAL_DATABASE_URL: postgresql://${CAJAL_DB_USER:-cajal}:${CAJAL_DB_PASSWORD:-cajal}@cajal-postgres:5432/${CAJAL_DB_NAME:-cajal}
+      CAJAL_DATABASE_URL: postgresql://${CAJAL_DB_USER:-cajal}:${CAJAL_DB_PASSWORD:-cajal}@127.0.0.1:5432/${CAJAL_DB_NAME:-cajal}
       CAJAL_DATABASE_SSL: disable
-      CAJAL_WATCHTOWER_URL: http://cajal-watchtower:8080
+      CAJAL_WATCHTOWER_URL: http://127.0.0.1:8080
       CAJAL_WATCHTOWER_TOKEN: ${CAJAL_WATCHTOWER_TOKEN:-}
-    ports:
-      - "4000:4000"
-      - "5514:5514/udp"
-      - "5514:5514/tcp"
-      - "2055:2055/udp"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
@@ -41,6 +39,8 @@ services:
   socket-proxy:
     image: tecnativa/docker-socket-proxy
     container_name: cajal-socket-proxy
+    ports:
+      - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -55,6 +55,8 @@ services:
   watchtower:
     image: containrrr/watchtower
     container_name: cajal-watchtower
+    ports:
+      - "127.0.0.1:8080:8080"
     depends_on:
       - socket-proxy
     environment:

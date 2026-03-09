@@ -66,7 +66,7 @@ The dashboard (`public/app.js`) is a stateful client that refreshes snapshots fr
 
 ## Testing Strategy
 
-Current unit tests focus on high-risk behavior:
+256 total tests (243 Node + 13 Python) covering:
 
 - Syslog parsing/source matching/metric updates
 - NetFlow parser paths (v5, v9 template+data) and top-talker ranking
@@ -74,6 +74,14 @@ Current unit tests focus on high-risk behavior:
 - Heartbeat normalization/status derivation
 - Collector-agent queue/session/update fallback helpers
 - Linux agent command validation and speedtest fallback behavior
+- Exhaustive unauthenticated endpoint scan (allowlist-based)
+- Database SSL auto-detection and all SSL mode configurations
+- Schema versioning, migration ordering, and startup integration
+- PostgreSQL connection retry with exponential backoff
+- Setup token single-use consumption
+- TCP syslog stream framing and SNMPv3 credential isolation
+- AsyncMutex serialization and error recovery
+- TOTP replay map pruning and conditional metric decay
 
 Run test suites:
 

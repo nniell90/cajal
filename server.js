@@ -364,6 +364,8 @@ const {
   migrateExistingFilesToPostgresStore,
   initStorageBackend,
   closeStorageBackend,
+  purgeStaleDbRows,
+  CURRENT_SCHEMA_VERSION,
 } = require('./lib/storage');
 
 // Inject storage backend into lib/logging.js (must come after smart* functions are defined)
@@ -635,15 +637,7 @@ const {
 } = require('./lib/monitoring');
 
 const { createHttpHandler } = require('./lib/router');
-
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml'
-};
-
+const { pruneTotpLastUsedStep } = require('./lib/routes/auth');
 
 const defaultSiteSeeds = [
   ['site-hq', 'HQ', 'Primary office edge and core connectivity.', 'internal', 'HQ Edge Firewall', 'up', '203.0.113.12', true, ['noc@cajal.local', 'infra@cajal.local'], '2026-02-12T14:05:00.000Z', [true, 'udp', 'syslog-hq-token', '2026-02-18T15:20:00.000Z'], [true, '10.0.0.1', 'public-hq', '2026-02-16T17:10:00.000Z'], [true, 'HQ-FW-01', 'netflow-hq-secret', '2026-02-19T12:45:00.000Z'], [100, 100, 99.96, 100, 99.92, 100, 99.98, 99.95, 100, 100, 99.9, 99.97, 100, 100], '67d 04h', ['10 min ago', 942, 901, 4], ['40 min ago', 934, 887, 5]],
@@ -886,10 +880,12 @@ async function loadState() {
 
 
 
+const persistMutex = new AsyncMutex();
+
 function persistLoop(state) {
   setInterval(() => {
     if (!state.dirtySites) return;
-    flushDirtyState(state, { forceSites: true })
+    persistMutex.run(() => flushDirtyState(state, { forceSites: true }))
       .catch((err) => {
         logSystemError('persist.sites', err, { dirtySites: state.dirtySites });
       });
@@ -897,7 +893,7 @@ function persistLoop(state) {
 
   setInterval(() => {
     if (!state.dirtyEvents) return;
-    flushDirtyState(state, { forceEvents: true })
+    persistMutex.run(() => flushDirtyState(state, { forceEvents: true }))
       .catch((err) => {
         logSystemError('persist.events', err, { dirtyEvents: state.dirtyEvents });
       });
@@ -905,7 +901,7 @@ function persistLoop(state) {
 
   setInterval(() => {
     if (!state.apiTokensDirty) return;
-    flushDirtyState(state, { forceApiTokens: true })
+    persistMutex.run(() => flushDirtyState(state, { forceApiTokens: true }))
       .catch((err) => {
         logSystemError('persist.api_tokens', err, { apiTokensDirty: state.apiTokensDirty });
       });
@@ -1052,6 +1048,7 @@ async function main() {
 
   setInterval(() => {
     enforceStorageRetention(state, { persistEventsNow: true })
+      .then(() => purgeStaleDbRows(DATA_RETENTION_DAYS))
       .catch((err) => logSystemError('retention.enforce.interval', err));
   }, 10 * 60 * 1000);
 
@@ -1068,6 +1065,7 @@ async function main() {
       if (!setup || now - setup.createdAt > LOCAL_SETUP_TTL_MS) shared.localSetupState.delete(token);
     }
     pruneCollectorAgentSessions(state, now);
+    pruneTotpLastUsedStep();
 
     // ── Prune flow Maps for deleted sites ──────────────────────────────────────
     const activeSiteIds = new Set(state.sites.map((s) => s.id));
@@ -1110,7 +1108,7 @@ async function main() {
     const tlsOptions = { cert: certPem, key: keyPem, ...(caPem ? { ca: caPem } : {}) };
     const httpsServer = https.createServer(tlsOptions, createHttpHandler(state));
     httpsServer.requestTimeout = 30000;
-    httpsServer.headersTimeout = 10000;
+    httpsServer.headersTimeout = 35000;
     httpsServer.keepAliveTimeout = 5000;
 
     const redirectServer = http.createServer((req, res) => {
@@ -1134,7 +1132,7 @@ async function main() {
     // ── HTTP mode: no SSL cert configured yet ────────────────────────────────
     const server = http.createServer(createHttpHandler(state));
     server.requestTimeout = 30000;
-    server.headersTimeout = 10000;
+    server.headersTimeout = 35000;
     server.keepAliveTimeout = 5000;
     installShutdownHandlers(state, server);
     server.listen(PORT, () => {
@@ -1300,6 +1298,11 @@ module.exports = {
     resetRuntimeSettingsForTests,
     resetConfigIntegrityStateForTests,
     resetSecurityStateForTests,
+    persistMutex,
+    AsyncMutex,
+    resolvePostgresSslConfig,
+    buildPostgresPoolConfig,
+    CURRENT_SCHEMA_VERSION,
     constants: {
       COLLECTOR_AGENT_SESSION_TTL_MS,
       COLLECTOR_AGENT_COMMAND_LEASE_MS,
@@ -1310,7 +1313,8 @@ module.exports = {
       NETFLOW_FLOW_TIMEOUT_MIN_MS,
       NETFLOW_TOP_WINDOW_MS,
       SESSION_TTL_MS,
-      SESSION_IDLE_TTL_MS
+      SESSION_IDLE_TTL_MS,
+      DATA_RETENTION_DAYS,
     }
   }
 };

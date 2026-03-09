@@ -12,6 +12,45 @@ This README is the canonical operator/developer guide for running and extending 
 
 ## Patch Notes {#patch-notes}
 
+- Version 1.6:
+  - **Security hardening** — all data endpoints now require authentication (sites, devices, alerts, topology, summary, public-services, location-monitors, settings/locations, agent/collectors)
+  - Unauthenticated health probe at `/api/healthz` for load balancers and Docker health checks
+  - Setup token single-use enforcement — `consumeSetupToken` now deletes token after use
+  - TOTP replay map auto-pruning prevents unbounded memory growth
+  - TCP syslog rewritten with proper newline-delimited stream framing (buffer overflow protection at 64KB)
+  - SNMPv3 credentials no longer visible in process table — uses temp config file via `SNMPCONFPATH`
+  - Database SSL auto-detection — localhost connections default to `disable`, remote to `require` (no manual config needed)
+  - Schema versioning with migration tracking table (`cajal_schema_migrations`)
+  - Database data purging — stale log rows automatically purged based on `CAJAL_DATA_RETENTION_DAYS`
+  - PostgreSQL connection retry with exponential backoff (5 attempts on startup)
+  - `decaySyslogMetrics` only marks state dirty when values actually change (reduces unnecessary DB writes)
+  - Write serialization via `AsyncMutex` on persist loop prevents concurrent state corruption
+  - Server `headersTimeout` corrected to 35s (must exceed `requestTimeout` per Node.js spec)
+  - Duplicate `MIME_TYPES` constant removed from server.js
+  - 256 unit tests (243 Node + 13 Python, up from 225)
+
+- Version 1.5:
+  - Architecture hardening — router split from 3,900-line monolith into 10 focused route modules
+  - Write serialization mutex prevents concurrent state corruption
+  - Request timeouts (30s request, 10s headers, 5s keep-alive)
+  - Transparent `/api/v1/*` versioned URL prefix
+  - TCP socket error handling and timeouts in syslog collectors
+  - Zero-config install scripts — one-liner for Linux/macOS (`install.sh`) and Windows (`install.bat`)
+  - Windows installer uses `winget` (no PowerShell required)
+  - Host networking (`network_mode: host`) preserves real source IPs for syslog/NetFlow traffic
+  - Down-device indicator changed from animated border tracer to soft red glow pulse
+  - Auto-refresh no longer wipes text in form fields while editing
+  - Version check uses proper semver comparison
+  - Service monitors show DOWN instead of CHECKING when unconfigured
+  - Redirect loop between dashboard and login page fixed
+  - `iproute2` added to Docker image (`listeners` terminal command works)
+  - TOTP replay prevention, account lockout (8 failures / 15min cooldown), anti-enumeration on login
+  - 225 unit tests (up from 127)
+
+- Version 1.4:
+  - Seed data and site layout updates for production environment
+  - Docker Compose v1 crash detection and fallback
+
 - Version 1.3:
   - Zero-config install — `bash docker-reload.sh rebuild` auto-generates all secrets on first run (no `.env` editing required)
   - First-run setup wizard guides new admins through initial configuration on first login
@@ -202,16 +241,33 @@ Numeric class IDs are used to categorize events:
   - Class/source filters
   - CLI-style text output
 
-## 5. Local setup and run
+## 5. Install and run
 
-### 5.1 Prerequisites
+### 5.0 One-command install (recommended)
+
+**Linux / macOS** — installs Git, Node.js 20, Docker, clones the repo, and starts all containers:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nniell90/cajal/main/install.sh | bash
+```
+
+**Windows** (cmd.exe) — uses `winget` to install Git, Node.js, Docker Desktop:
+
+```
+curl -o install.bat https://raw.githubusercontent.com/nniell90/cajal/main/install.bat && install.bat
+```
+
+After install, open `http://localhost:4000` and create your admin account on first login.
+
+### 5.1 Prerequisites (manual install)
 
 - Node.js `>=20`
+- Docker (Docker Compose v2 recommended)
 - `snmpget` command available for SNMP polling (Net-SNMP tools)
 - Optional: `speedtest` CLI for WAN throughput tests
 - Optional: Teams webhook endpoint
 
-### 5.2 Required environment
+### 5.2 Required environment (manual / non-Docker)
 
 Set encryption key:
 
@@ -255,12 +311,14 @@ The first admin account is created through the browser on first login.
 
 This starts four containers:
 
-| Container | Purpose |
-|---|---|
-| `cajal-postgres` | PostgreSQL data store |
-| `cajal-app` | Application (port 4000, syslog 5514, NetFlow 2055) |
-| `cajal-socket-proxy` | Docker socket whitelist proxy (internal only) |
-| `cajal-watchtower` | Auto-update via HTTP API, monitors only labeled containers |
+| Container | Purpose | Networking |
+|---|---|---|
+| `cajal-postgres` | PostgreSQL data store | Bridge, localhost:5432 |
+| `cajal-app` | Application (port 4000, syslog 5514, NetFlow 2055) | **Host** (preserves real source IPs) |
+| `cajal-socket-proxy` | Docker socket whitelist proxy | Bridge, localhost:2375 |
+| `cajal-watchtower` | Auto-update via HTTP API | Bridge, localhost:8080 |
+
+**Why host networking?** Syslog and NetFlow collectors need to see the real source IP of each packet to match it to the correct device. Standard Docker port mapping (bridge mode) replaces the original source IP with Docker's internal gateway IP. With `network_mode: host`, the app binds directly to the host's network stack so `rinfo.address` and `socket.remoteAddress` return the actual device IP.
 
 Restart app only (fast, no rebuild):
 
@@ -299,7 +357,7 @@ docker compose down -v
 - `PORT` default `4000`
 - `CAJAL_CONFIG_KEY` required for decrypting monitor/SSO secrets
 - `CAJAL_DATABASE_URL` required (PostgreSQL is mandatory)
-- `CAJAL_DATABASE_SSL` default `disable` (`disable`, `require`, `verify-ca`, `verify-full`)
+- `CAJAL_DATABASE_SSL` auto-detected (`disable` for localhost, `require` for remote; explicit: `disable`, `require`, `prefer`, `verify-ca`, `verify-full`)
 - `CAJAL_DATABASE_POOL_MAX` default `20`
 - `CAJAL_DATABASE_POOL_IDLE_TIMEOUT_MS` default `30000`
 - `CAJAL_DATABASE_POOL_CONNECTION_TIMEOUT_MS` default `10000`
@@ -360,7 +418,7 @@ Version checking and the "Update Now" button in Settings → System Health work 
 |---|---|---|
 | `CAJAL_GITHUB_REPO` | `nniell90/cajal` | GitHub Releases API query |
 | `CAJAL_UPDATE_IMAGE` | `ghcr.io/nniell90/cajal:latest` | Image shown in update panel |
-| `CAJAL_WATCHTOWER_URL` | `http://cajal-watchtower:8080` | Watchtower HTTP API (internal) |
+| `CAJAL_WATCHTOWER_URL` | `http://127.0.0.1:8080` | Watchtower HTTP API (via localhost, since app uses host networking) |
 | `CAJAL_WATCHTOWER_TOKEN` | *(auto-generated)* | Must match Watchtower container |
 
 The "Update Now" button triggers Watchtower via its HTTP API, which pulls the new image and hot-swaps the `cajal-app` container. The page polls `/api/health` and reloads automatically when the new version is detected (~30s). Update triggers are rate-limited to 1 per 5 minutes per admin and logged to the security audit trail.
@@ -503,11 +561,16 @@ If Watchtower is not running or the token is missing, the UI will still show ver
 - CSRF origin checks for state-changing cookie-auth API requests
 - Login protection uses IP rate limiting plus account-level lockout/backoff
 - Response headers include a hardened CSP (`script-src 'self'`)
+- All data API endpoints require authentication (exhaustive scan verified)
+- Database SSL auto-detected (encrypted for remote connections, disabled for safe localhost)
+- Schema versioning with tracked migrations
+- SNMPv3 credentials isolated in temp config files (not visible in process table)
+- TCP syslog stream framing with 64KB overflow protection
+- Setup tokens are single-use (deleted after consumption)
 
 ### 8.2 Gaps for production
 
 - No centralized secret manager integration
-- File backend has no HA locking model (use PostgreSQL backend for production)
 - Limited SNMPv3 profile support (`authNoPriv`)
 
 ### 8.3 Docker socket security model
@@ -559,6 +622,15 @@ Latency can still be shown from ping.
 - Check Settings -> Diagnostics Console and Settings -> Raw Telemetry Stream for unmatched source IP entries
 - Run Settings -> Local Firewall Checker to validate host firewall/port rules
 - Verify flow state window settings if badges flap: `CAJAL_FLOW_TIMEOUT_MS` and `CAJAL_SYSLOG_FLOW_TIMEOUT_MIN_MS`
+
+### 9.7.1 All syslog/NetFlow traffic shows the same source IP (Docker bridge IP)
+
+If all incoming traffic shows a source IP like `172.17.0.1` instead of the real device IP, the cajal container is running in bridge mode instead of host mode. Cajal requires `network_mode: host` to preserve real source IPs.
+
+- Verify `docker-compose.yml` has `network_mode: host` on the cajal service
+- Redeploy: `docker compose down && docker compose up -d`
+- The cajal service should NOT have `ports:` mappings — host mode binds directly
+- After redeployment, `listeners` in the tools terminal should show ports bound on `0.0.0.0` (not a Docker bridge IP)
 
 ### 9.8 NetFlow/IPFIX enabled but no traffic in top talkers
 
@@ -657,16 +729,34 @@ Latency can still be shown from ping.
 
 - `server.js` entry point — starts servers, registers shutdown handlers, calls `main()`
 - `lib/` — modularized server logic:
-  - `router.js` HTTP request handler (~3800 lines, all API routes)
+  - `router.js` slim HTTP dispatcher — delegates to 10 route modules
+  - `routes/auth.js` login, TOTP, setup wizard, session management
+  - `routes/sites.js` site CRUD, monitor config, notifications
+  - `routes/settings.js` runtime, SSO, SSL, webhook routing, storage, diagnostics
+  - `routes/system.js` version check, Watchtower update trigger
+  - `routes/agent.js` collector agent registration, command queue, tools terminal
+  - `routes/events.js` event viewer, audit trail
+  - `routes/backup.js` export/import
+  - `routes/health.js` health endpoint and summary
+  - `routes/users.js` user management
+  - `routes/devices.js` device CRUD
   - `constants.js` environment variable bindings and defaults
   - `session.js` auth, CSP, security headers
-  - `monitoring.js` ping, SNMP, NetFlow, syslog pollers
+  - `monitoring.js` ping, SNMP, NetFlow, syslog pollers and collectors
   - `ratelimit.js` rate limiting and account lockout helpers
-  - and 14 other focused modules
+  - `auth.js` password hashing, TOTP, setup tokens
+  - `storage.js` PostgreSQL persistence layer
+  - `shared.js` in-memory state singleton
+  - `events.js` event logging and classification
 - `public/index.html` main dashboard
 - `public/app.js` dashboard client logic
 - `public/login.html` + `public/login.js` local login flow
+- `public/help.html` + `public/help.js` in-app help (renders README)
 - `public/styles.css` complete UI styling
+- `install.sh` one-command Linux/macOS installer
+- `install.bat` one-command Windows installer (uses `winget`)
+- `docker-reload.sh` Docker build/restart helper with auto-setup
+- `docker-compose.yml` production stack (host networking for source IP preservation)
 - `docs/architecture.md` system architecture and data-flow reference
 
 ### 10.2 Unit tests
@@ -681,6 +771,7 @@ Latency can still be shown from ping.
   - `npm run test:e2e`
 - CI workflow:
   - `.github/workflows/ci.yml` runs unit tests plus Playwright smoke checks on push/PR
+- 256 total tests (243 Node + 13 Python)
 - Current unit coverage focus:
   - Core Syslog parsing/source matching/metric update logic
   - Core NetFlow/IPFIX parsing + top talker calculation
@@ -688,6 +779,25 @@ Latency can still be shown from ping.
   - Heartbeat target/status/freshness logic
   - Collector agent session/queue/update fallback helpers
   - Linux agent speedtest fallback + command validation helpers
+  - Semver version comparison
+  - Account lockout expiry and failure reset
+  - TOTP replay prevention and code validation
+  - Password hashing round-trip and timing-safe comparison
+  - Full setup flow integration (bootstrap → password → TOTP → verify)
+  - Login response shape and anti-enumeration
+  - Auto-refresh input protection guard
+  - Source IP matching and Docker host networking verification
+  - Exhaustive unauthenticated endpoint scan (allowlist-based)
+  - Database SSL auto-detection and all SSL mode configurations
+  - Schema versioning, migration ordering, and startup integration
+  - PostgreSQL connection retry with exponential backoff
+  - Database data purging (stale log row cleanup)
+  - Setup token single-use consumption
+  - TCP syslog stream framing and buffer overflow protection
+  - SNMPv3 credential file isolation (no process table exposure)
+  - AsyncMutex serialization and error recovery
+  - TOTP replay map pruning
+  - Conditional syslog metric decay (dirty-state optimization)
 
 ### 10.3 Suggested next hardening steps
 

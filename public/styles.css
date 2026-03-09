@@ -2319,157 +2319,26 @@ button.location-ping-monitor-badge {
 }
 
 .site-tile.is-device-down {
-  border-color: rgba(255, 112, 124, 0.55);
+  border-color: rgba(255, 100, 116, 0.45);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 72, 92, 0.16),
-    0 0 16px rgba(255, 52, 84, 0.11);
+    0 0 12px rgba(255, 60, 80, 0.15),
+    0 0 28px rgba(255, 50, 72, 0.08);
+  animation: downGlowPulse 3s ease-in-out infinite;
 }
 
-.down-border-tracer {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  --trace-thickness: 2px;
-  --trace-length: clamp(28px, 18%, 92px);
-  --trace-corner: 12px;
-  --trace-speed: 6s;
-}
-
-.down-border-tracer::before,
-.down-border-tracer::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: var(--trace-length);
-  height: var(--trace-thickness);
-  border-radius: 999px;
-  background: rgba(255, 76, 99, 0.98);
-  box-shadow:
-    0 0 8px rgba(255, 62, 90, 0.82),
-    0 0 18px rgba(255, 47, 78, 0.62),
-    0 0 32px rgba(255, 38, 70, 0.38);
-  animation: downBorderTrace var(--trace-speed) linear infinite;
-  opacity: 1;
-}
-
-.down-border-tracer::after {
-  animation-delay: calc(var(--trace-speed) * -0.5);
-}
-
-@keyframes downBorderTrace {
-  0% {
-    top: 0;
-    left: 0;
-    width: var(--trace-length);
-    height: var(--trace-thickness);
-    opacity: 1;
-  }
-  24% {
-    top: 0;
-    left: calc(100% - var(--trace-length));
-    width: var(--trace-length);
-    height: var(--trace-thickness);
-    opacity: 1;
-  }
-  24.9% {
-    opacity: 0;
-  }
-  25% {
-    top: 0;
-    left: calc(100% - var(--trace-corner));
-    width: var(--trace-corner);
-    height: var(--trace-corner);
-    border-radius: calc(var(--trace-corner) * 0.5);
-    opacity: 0;
-  }
-  25.1% {
-    opacity: 0;
-  }
-  26% {
-    top: 0;
-    left: calc(100% - var(--trace-thickness));
-    width: var(--trace-thickness);
-    height: var(--trace-length);
-    border-radius: 999px;
-    opacity: 1;
-  }
-  49% {
-    top: calc(100% - var(--trace-length));
-    left: calc(100% - var(--trace-thickness));
-    width: var(--trace-thickness);
-    height: var(--trace-length);
-    opacity: 1;
-  }
-  49.9% {
-    opacity: 0;
+@keyframes downGlowPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 12px rgba(255, 60, 80, 0.15),
+      0 0 28px rgba(255, 50, 72, 0.08);
   }
   50% {
-    top: calc(100% - var(--trace-corner));
-    left: calc(100% - var(--trace-corner));
-    width: var(--trace-corner);
-    height: var(--trace-corner);
-    border-radius: calc(var(--trace-corner) * 0.5);
-    opacity: 0;
-  }
-  50.1% {
-    opacity: 0;
-  }
-  51% {
-    top: calc(100% - var(--trace-thickness));
-    left: calc(100% - var(--trace-length));
-    width: var(--trace-length);
-    height: var(--trace-thickness);
-    border-radius: 999px;
-    opacity: 1;
-  }
-  74% {
-    top: calc(100% - var(--trace-thickness));
-    left: 0;
-    width: var(--trace-length);
-    height: var(--trace-thickness);
-    opacity: 1;
-  }
-  74.9% {
-    opacity: 0;
-  }
-  75% {
-    top: calc(100% - var(--trace-corner));
-    left: 0;
-    width: var(--trace-corner);
-    height: var(--trace-corner);
-    border-radius: calc(var(--trace-corner) * 0.5);
-    opacity: 0;
-  }
-  75.1% {
-    opacity: 0;
-  }
-  76% {
-    top: calc(100% - var(--trace-length));
-    left: 0;
-    width: var(--trace-thickness);
-    height: var(--trace-length);
-    border-radius: 999px;
-    opacity: 1;
-  }
-  99% {
-    top: 0;
-    left: 0;
-    width: var(--trace-thickness);
-    height: var(--trace-length);
-    border-radius: 999px;
-    opacity: 1;
-  }
-  100% {
-    top: 0;
-    left: 0;
-    width: var(--trace-corner);
-    height: var(--trace-corner);
-    border-radius: calc(var(--trace-corner) * 0.5);
-    opacity: 0;
+    box-shadow:
+      0 0 18px rgba(255, 60, 80, 0.25),
+      0 0 36px rgba(255, 50, 72, 0.12);
   }
 }
+
 
 .site-tile.is-dirty {
   border-color: rgba(214, 141, 91, 0.55);
@@ -4287,8 +4156,7 @@ body[data-ui-theme="slate-neon"] .metric-card {
   .change-ticker-track.is-active,
   .server-health-badge,
   .undo-visible-flash,
-  .down-border-tracer::before,
-  .down-border-tracer::after,
+  .site-tile.is-device-down,
   .site-tile.auto-refresh-blink,
   .purple-cascade-on-refresh::after,
   .global-refresh-purple-blast::before,

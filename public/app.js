@@ -4678,7 +4678,6 @@ function siteTile(site) {
 
   return `
     <article class="site-tile role-${escapeHtml(role)} ${dirtyMetaSites.has(site.id) ? 'is-dirty' : ''} ${showMetaEditor ? 'is-editing' : ''} ${toolsExpanded ? 'tools-expanded' : ''} ${collectorDetailsExpanded ? 'collector-details-expanded' : ''} ${showDownTracer ? 'is-device-down' : ''}" data-site-id="${escapeHtml(site.id)}">
-      ${showDownTracer ? '<span class="down-border-tracer" aria-hidden="true"></span>' : ''}
       <div class="site-top">
         <div class="site-details">
           ${allowManage
@@ -5078,9 +5077,20 @@ async function loadDashboard(options = {}) {
     loadPublicServiceStatuses(),
     loadLocationPingMonitorStatuses()
   ]);
-  renderTiles();
-  if (fromGlobalClockRefresh) {
-    blinkDeviceTilesOnGlobalRefresh();
+  // Skip DOM rebuild during auto-refresh if user is actively interacting with tile inputs
+  const skipTileRender = fromGlobalClockRefresh && (() => {
+    if (activeEditor || activeMetaEditorSiteId) return true;
+    const el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+      if (locationPanels && locationPanels.contains(el)) return true;
+    }
+    return false;
+  })();
+  if (!skipTileRender) {
+    renderTiles();
+    if (fromGlobalClockRefresh) {
+      blinkDeviceTilesOnGlobalRefresh();
+    }
   }
   populateSiteSelect();
   renderLocationTitles();

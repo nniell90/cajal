@@ -264,7 +264,7 @@ test('constants.js has sensible defaults for update config', () => {
   const constants = readFile('lib/constants.js');
   assert.match(constants, /GITHUB_REPO.*'nniell90\/cajal'/, 'GITHUB_REPO default');
   assert.match(constants, /UPDATE_IMAGE.*'ghcr\.io\/nniell90\/cajal:latest'/, 'UPDATE_IMAGE default');
-  assert.match(constants, /WATCHTOWER_URL.*'http:\/\/cajal-watchtower:8080'/, 'WATCHTOWER_URL default');
+  assert.match(constants, /WATCHTOWER_URL.*'http:\/\/127\.0\.0\.1:8080'/, 'WATCHTOWER_URL default');
 });
 
 test('.env.example documents auto-generation behavior', () => {
@@ -327,7 +327,7 @@ test('TCP syslog socket has error handler and timeout', () => {
 test('HTTP servers have request, headers, and keepAlive timeouts', () => {
   const server = readFile('server.js');
   assert.match(server, /requestTimeout\s*=\s*30000/, 'server must set requestTimeout');
-  assert.match(server, /headersTimeout\s*=\s*10000/, 'server must set headersTimeout');
+  assert.match(server, /headersTimeout\s*=\s*35000/, 'server must set headersTimeout');
   assert.match(server, /keepAliveTimeout\s*=\s*5000/, 'server must set keepAliveTimeout');
 });
 
@@ -385,4 +385,203 @@ test('backup import route sets extended timeout', () => {
   assert.ok(importStart >= 0, 'backup import route must exist');
   const importBlock = backup.slice(importStart, importStart + 400);
   assert.match(importBlock, /req\.setTimeout\(300000\)/, 'backup import must have 5-min timeout');
+});
+
+// ── Exhaustive unauthenticated endpoint scan ──────────────────────────────────
+// Every GET endpoint that returns site/device/alert/settings data MUST require auth.
+// Only allow-listed public endpoints may skip auth.
+test('all data GET endpoints require authentication', () => {
+  const ALLOWED_PUBLIC_ENDPOINTS = new Set([
+    '/api/auth/me',
+    '/api/auth/login',
+    '/api/auth/callback',
+    '/api/auth/local/totp-qr',
+    '/api/auth/local/login',
+    '/api/auth/local/setup-password',
+    '/api/auth/local/verify-totp',
+    '/api/health',
+    '/api/healthz',
+    '/api/help/readme',
+    '/api/agent/linux/download',
+    '/api/agent/windows/download',
+    '/login.html',
+  ]);
+
+  const routeFiles = [
+    'lib/routes/sites.js',
+    'lib/routes/devices.js',
+    'lib/routes/health.js',
+    'lib/routes/settings.js',
+    'lib/routes/events.js',
+    'lib/routes/system.js',
+    'lib/routes/backup.js',
+    'lib/routes/agent.js',
+    'lib/routes/users.js',
+    'lib/routes/auth.js',
+  ];
+
+  const getRoutePattern = /req\.method\s*===?\s*'GET'\s*&&\s*(?:url\.pathname\s*===?\s*'([^']+)'|\/\^(.+?)\$\/\.test\(url\.pathname\))/g;
+  const failures = [];
+
+  for (const file of routeFiles) {
+    const src = readFile(file);
+    let match;
+    while ((match = getRoutePattern.exec(src)) !== null) {
+      const endpoint = match[1] || match[2];
+      if (!endpoint) continue;
+      if (ALLOWED_PUBLIC_ENDPOINTS.has(endpoint)) continue;
+
+      // Find the code block between this match and the next ~300 chars
+      const blockStart = match.index;
+      const block = src.substring(blockStart, blockStart + 400);
+
+      const hasAuth =
+        block.includes('requestUser?.authenticated') ||
+        block.includes('ensureAllowed(requestUser') ||
+        block.includes('Authentication required');
+
+      if (!hasAuth) {
+        failures.push(`${file}: GET ${endpoint} missing auth check`);
+      }
+    }
+  }
+
+  assert.deepEqual(failures, [], `Unauthenticated GET endpoints found:\n${failures.join('\n')}`);
+});
+
+// ── TCP syslog framing uses newline-delimited buffering ───────────────────────
+test('TCP syslog collector uses newline-delimited message framing', () => {
+  const monSrc = readFile('lib/monitoring.js');
+  const tcpStart = monSrc.indexOf('net.createServer');
+  assert.ok(tcpStart >= 0, 'syslog TCP server must exist');
+  const tcpBlock = monSrc.substring(tcpStart, tcpStart + 2000);
+  assert.ok(tcpBlock.includes('tcpBuffer'), 'TCP syslog must use a buffer for message framing');
+  assert.ok(tcpBlock.includes('Buffer.concat'), 'TCP syslog must concatenate chunks');
+  assert.ok(tcpBlock.includes('indexOf(10)') || tcpBlock.includes("indexOf('\\n')"), 'TCP syslog must split on newline boundaries');
+  assert.ok(tcpBlock.includes('64 * 1024'), 'TCP syslog buffer must have a max size guard');
+  assert.ok(tcpBlock.includes("on('close'"), 'TCP syslog must flush remaining buffer on close');
+});
+
+// ── Persist mutex wraps flushDirtyState ───────────────────────────────────────
+test('persistLoop wraps flushDirtyState with mutex', () => {
+  const serverSrc = readFile('server.js');
+  assert.ok(serverSrc.includes('persistMutex'), 'server.js must use persistMutex');
+  assert.ok(serverSrc.includes("persistMutex.run(() => flushDirtyState"), 'persist calls must be wrapped in mutex.run');
+  assert.ok(serverSrc.includes("const persistMutex = new AsyncMutex()"), 'persistMutex must be an AsyncMutex instance');
+});
+
+// ── consumeSetupToken actually deletes the token ──────────────────────────────
+test('consumeSetupToken removes the token from localSetupState', () => {
+  const authSrc = readFile('lib/auth.js');
+  const consumeStart = authSrc.indexOf('function consumeSetupToken');
+  assert.ok(consumeStart >= 0, 'consumeSetupToken must exist');
+  const consumeBlock = authSrc.substring(consumeStart, consumeStart + 400);
+  // Must delete the token before returning
+  const deleteCount = (consumeBlock.match(/localSetupState\.delete/g) || []).length;
+  assert.ok(deleteCount >= 2, 'consumeSetupToken must delete token on expiry AND on successful consume');
+});
+
+// ── SNMP credentials not in process args for v3 ──────────────────────────────
+test('SNMPv3 credentials use config file instead of CLI args', () => {
+  const monSrc = readFile('lib/monitoring.js');
+  const snmpStart = monSrc.indexOf('function runSnmpGet');
+  assert.ok(snmpStart >= 0, 'runSnmpGet must exist');
+  const snmpBlock = monSrc.substring(snmpStart, snmpStart + 2200);
+  assert.ok(snmpBlock.includes('SNMPCONFPATH'), 'SNMPv3 must use SNMPCONFPATH for credentials');
+  assert.ok(snmpBlock.includes('snmp.conf'), 'SNMPv3 must write a temporary snmp.conf file');
+  assert.ok(snmpBlock.includes('mode: 0o600') || snmpBlock.includes('0o600'), 'snmp.conf must have restricted permissions');
+  assert.ok(snmpBlock.includes('rmSync') || snmpBlock.includes('unlinkSync'), 'temporary config must be cleaned up after use');
+});
+
+// ── headersTimeout > requestTimeout ──────────────────────────────────────────
+test('headersTimeout is greater than requestTimeout on HTTP servers', () => {
+  const serverSrc = readFile('server.js');
+  const requestTimeoutMatch = serverSrc.match(/\.requestTimeout\s*=\s*(\d+)/);
+  const headersTimeoutMatch = serverSrc.match(/\.headersTimeout\s*=\s*(\d+)/);
+  assert.ok(requestTimeoutMatch, 'requestTimeout must be set');
+  assert.ok(headersTimeoutMatch, 'headersTimeout must be set');
+  const requestTimeout = Number(requestTimeoutMatch[1]);
+  const headersTimeout = Number(headersTimeoutMatch[1]);
+  assert.ok(headersTimeout > requestTimeout,
+    `headersTimeout (${headersTimeout}) must be > requestTimeout (${requestTimeout}) per Node.js docs`);
+});
+
+// ── /api/healthz unauthenticated endpoint ────────────────────────────────────
+test('/api/healthz endpoint exists and does not require auth', () => {
+  const healthSrc = readFile('lib/routes/health.js');
+  const healthzStart = healthSrc.indexOf("/api/healthz");
+  assert.ok(healthzStart >= 0, '/api/healthz endpoint must exist');
+  const healthzBlock = healthSrc.substring(healthzStart, healthzStart + 200);
+  assert.ok(!healthzBlock.includes('ensureAllowed'), '/api/healthz must not require admin auth');
+  assert.ok(!healthzBlock.includes('requestUser?.authenticated'), '/api/healthz must not require user auth');
+  assert.ok(healthzBlock.includes('ok: true') || healthzBlock.includes('"ok"'), '/api/healthz must return ok status');
+});
+
+// ── totpLastUsedStep pruning ─────────────────────────────────────────────────
+test('totpLastUsedStep map has periodic pruning', () => {
+  const authSrc = readFile('lib/routes/auth.js');
+  assert.ok(authSrc.includes('pruneTotpLastUsedStep'), 'auth.js must export pruneTotpLastUsedStep');
+  assert.ok(authSrc.includes('totpLastUsedStep.delete'), 'pruning must delete stale entries');
+
+  const serverSrc = readFile('server.js');
+  assert.ok(serverSrc.includes('pruneTotpLastUsedStep'), 'server.js must call pruneTotpLastUsedStep');
+});
+
+// ── decaySyslogMetrics only marks dirty when changed ─────────────────────────
+test('decaySyslogMetrics only marks dirty when EPS actually changes', () => {
+  const monSrc = readFile('lib/monitoring.js');
+  const decayStart = monSrc.indexOf('function decaySyslogMetrics');
+  assert.ok(decayStart >= 0, 'decaySyslogMetrics must exist');
+  const decayBlock = monSrc.substring(decayStart, decayStart + 500);
+  assert.ok(decayBlock.includes('let changed = false'), 'must track whether values changed');
+  assert.ok(decayBlock.includes('if (changed) markSiteDirty'), 'must only call markSiteDirty when changed');
+});
+
+// ── Duplicate MIME_TYPES removed from server.js ──────────────────────────────
+test('MIME_TYPES is not duplicated in server.js', () => {
+  const serverSrc = readFile('server.js');
+  const mimeCount = (serverSrc.match(/const MIME_TYPES/g) || []).length;
+  assert.equal(mimeCount, 0, 'server.js should not define MIME_TYPES (defined in router.js only)');
+  const routerSrc = readFile('lib/router.js');
+  assert.ok(routerSrc.includes('const MIME_TYPES'), 'MIME_TYPES must exist in router.js');
+});
+
+// ── Database architecture tests ──────────────────────────────────────────────
+test('all Postgres queries use parameterized values (no string concatenation)', () => {
+  const storageSrc = readFile('lib/storage.js');
+  // Every .query() call should use $1/$2 parameterized syntax
+  const queryPattern = /\.query\(\s*[`'"]([^`'"]+)/g;
+  let match;
+  while ((match = queryPattern.exec(storageSrc)) !== null) {
+    const sql = match[1];
+    // Skip simple non-parameterized queries (no user input)
+    if (/^(SELECT 1|CREATE |INSERT INTO cajal_schema)/.test(sql)) continue;
+    // Any query involving cajal_store with WHERE must use $1
+    if (sql.includes('cajal_store') && sql.includes('WHERE')) {
+      assert.ok(sql.includes('$1'), `Query must use parameterized values: ${sql.slice(0, 60)}`);
+    }
+  }
+});
+
+test('storage.js exports schema versioning functions', () => {
+  const storageSrc = readFile('lib/storage.js');
+  assert.ok(storageSrc.includes('CURRENT_SCHEMA_VERSION'), 'must export CURRENT_SCHEMA_VERSION');
+  assert.ok(storageSrc.includes('runSchemaMigrations'), 'must export runSchemaMigrations');
+  assert.ok(storageSrc.includes('connectWithRetry'), 'must export connectWithRetry');
+  assert.ok(storageSrc.includes('purgeStaleDbRows'), 'must export purgeStaleDbRows');
+});
+
+test('initStorageBackend uses connection retry', () => {
+  const storageSrc = readFile('lib/storage.js');
+  const initStart = storageSrc.indexOf('async function initStorageBackend');
+  assert.ok(initStart >= 0, 'initStorageBackend must exist');
+  const initBlock = storageSrc.substring(initStart, initStart + 1500);
+  assert.ok(initBlock.includes('connectWithRetry'), 'must use connectWithRetry instead of direct query');
+  assert.ok(initBlock.includes('runSchemaMigrations'), 'must run schema migrations on startup');
+});
+
+test('.env.example documents DATABASE_SSL auto-detection', () => {
+  const envExample = readFile('.env.example');
+  assert.ok(envExample.includes('CAJAL_DATABASE_SSL'), 'must document CAJAL_DATABASE_SSL');
+  assert.ok(envExample.includes('Auto-detect') || envExample.includes('auto-detect'), 'must mention auto-detection');
 });

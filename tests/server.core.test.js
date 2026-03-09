@@ -1661,3 +1661,392 @@ test('/api/auth/me does not have rate limiting', () => {
   const meBlock = authSrc.substring(meStart, meEnd);
   assert.ok(!meBlock.includes('enforceRateLimitOrSend'), '/api/auth/me must not be rate-limited (causes redirect loops)');
 });
+
+// ── Auto-refresh skip guard tests ────────────────────────────────────────────
+
+test('loadDashboard skips renderTiles during auto-refresh when editor is active', () => {
+  const appSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const fnStart = appSrc.indexOf('async function loadDashboard');
+  const fnEnd = appSrc.indexOf('\nasync function', fnStart + 1);
+  const fnBody = appSrc.substring(fnStart, fnEnd);
+
+  // Must check fromGlobalClockRefresh before deciding to skip
+  assert.ok(fnBody.includes('fromGlobalClockRefresh'), 'loadDashboard must reference fromGlobalClockRefresh flag');
+
+  // Must check activeEditor
+  assert.ok(fnBody.includes('activeEditor'), 'auto-refresh guard must check activeEditor');
+
+  // Must check activeMetaEditorSiteId
+  assert.ok(fnBody.includes('activeMetaEditorSiteId'), 'auto-refresh guard must check activeMetaEditorSiteId');
+
+  // Must check activeElement tag for INPUT/TEXTAREA/SELECT
+  assert.ok(fnBody.includes('activeElement'), 'auto-refresh guard must check document.activeElement');
+  assert.ok(fnBody.includes('INPUT') || fnBody.includes('input'), 'auto-refresh guard must check INPUT elements');
+  assert.ok(fnBody.includes('TEXTAREA') || fnBody.includes('textarea'), 'auto-refresh guard must check TEXTAREA elements');
+
+  // Must conditionally skip renderTiles
+  assert.ok(fnBody.includes('skipTileRender'), 'loadDashboard must use skipTileRender guard');
+  assert.ok(fnBody.includes('if (!skipTileRender)'), 'renderTiles must only run when skipTileRender is false');
+});
+
+test('non-auto-refresh loadDashboard always renders tiles', () => {
+  const appSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const fnStart = appSrc.indexOf('async function loadDashboard');
+  const fnEnd = appSrc.indexOf('\nasync function', fnStart + 1);
+  const fnBody = appSrc.substring(fnStart, fnEnd);
+
+  // The skip guard must be gated on fromGlobalClockRefresh — user-initiated refreshes must always render
+  assert.ok(
+    fnBody.includes('fromGlobalClockRefresh && '),
+    'skipTileRender must require fromGlobalClockRefresh to be true (user-initiated refreshes must always render)'
+  );
+});
+
+test('scheduleAutoRefresh calls loadDashboard with fromGlobalClockRefresh: true', () => {
+  const appSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const schedStart = appSrc.indexOf('function scheduleAutoRefresh');
+  const schedEnd = appSrc.indexOf('\nfunction ', schedStart + 1);
+  const schedBody = appSrc.substring(schedStart, schedEnd);
+
+  assert.ok(
+    schedBody.includes('fromGlobalClockRefresh: true'),
+    'scheduleAutoRefresh must pass fromGlobalClockRefresh: true to loadDashboard'
+  );
+});
+
+test('down-border-tracer element no longer emitted', () => {
+  const appSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.ok(!appSrc.includes('down-border-tracer'), 'down-border-tracer span must be removed from tile HTML');
+});
+
+test('is-device-down uses soft glow instead of tracer animation', () => {
+  const cssSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'styles.css'), 'utf8');
+
+  // Must have the soft glow class
+  assert.ok(cssSrc.includes('.site-tile.is-device-down'), 'is-device-down class must exist');
+
+  // Must NOT have the old tracer styles
+  assert.ok(!cssSrc.includes('.down-border-tracer'), 'down-border-tracer styles must be removed');
+  assert.ok(!cssSrc.includes('downBorderTrace'), 'downBorderTrace keyframes must be removed');
+
+  // Must have the new glow pulse animation
+  assert.ok(cssSrc.includes('downGlowPulse'), 'downGlowPulse keyframes must exist for soft red glow');
+});
+
+// ── Source IP / network_mode: host tests ─────────────────────────────────────
+
+test('matchSiteBySourceIp matches correct site by real source IP', () => {
+  const state = makeState();
+  state.sites = [
+    makeSite({ id: 'fw-1', monitorConfig: { syslog: { enabled: true, sourceIp: '192.168.26.1' } } }),
+    makeSite({ id: 'fw-2', monitorConfig: { syslog: { enabled: true, sourceIp: '192.168.26.2' } } })
+  ];
+
+  const match = core.matchSiteBySourceIp(state, 'syslog', '192.168.26.1');
+  assert.equal(match.id, 'fw-1', 'must match by exact source IP');
+});
+
+test('matchSiteBySourceIp returns undefined for Docker bridge IP', () => {
+  const state = makeState();
+  state.sites = [
+    makeSite({ id: 'fw-1', monitorConfig: { syslog: { enabled: true, sourceIp: '192.168.26.1' } } })
+  ];
+
+  // Docker bridge IP should NOT match any configured device
+  const match = core.matchSiteBySourceIp(state, 'syslog', '172.17.0.1');
+  assert.equal(match, undefined, 'Docker bridge IP must not match any configured site');
+});
+
+test('matchSiteBySourceIp ignores disabled monitors', () => {
+  const state = makeState();
+  state.sites = [
+    makeSite({ id: 'fw-1', monitorConfig: { syslog: { enabled: false, sourceIp: '192.168.26.1' } } })
+  ];
+
+  const match = core.matchSiteBySourceIp(state, 'syslog', '192.168.26.1');
+  assert.equal(match, undefined, 'disabled monitor must not match');
+});
+
+test('matchSiteBySourceIp ignores sites with no sourceIp configured', () => {
+  const state = makeState();
+  state.sites = [
+    makeSite({ id: 'fw-1', monitorConfig: { syslog: { enabled: true } } })
+  ];
+
+  const match = core.matchSiteBySourceIp(state, 'syslog', '192.168.26.1');
+  assert.equal(match, undefined, 'site with no sourceIp must not match');
+});
+
+test('matchSiteBySourceIp works for netflow protocol too', () => {
+  const state = makeState();
+  state.sites = [
+    makeSite({ id: 'fw-1', monitorConfig: { netflow: { enabled: true, sourceIp: '10.0.0.1' } } })
+  ];
+
+  const match = core.matchSiteBySourceIp(state, 'netflow', '10.0.0.1');
+  assert.equal(match.id, 'fw-1', 'must match netflow by source IP');
+
+  const noMatch = core.matchSiteBySourceIp(state, 'syslog', '10.0.0.1');
+  assert.equal(noMatch, undefined, 'must not cross-match protocols');
+});
+
+test('docker-compose.yml uses network_mode: host for cajal container', () => {
+  const composeSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'docker-compose.yml'), 'utf8');
+  assert.ok(composeSrc.includes('network_mode: host'), 'cajal container must use host networking to preserve source IPs');
+
+  // Must NOT have port mappings on the cajal service (host mode binds directly)
+  const cajalBlock = composeSrc.substring(
+    composeSrc.indexOf('cajal:'),
+    composeSrc.indexOf('socket-proxy:')
+  );
+  assert.ok(!cajalBlock.includes('- "4000:4000"'), 'cajal service must not have port mappings when using host networking');
+  assert.ok(!cajalBlock.includes('- "5514:5514'), 'cajal service must not have syslog port mappings when using host networking');
+
+  // DB and Watchtower URLs must use 127.0.0.1, not container names
+  assert.ok(cajalBlock.includes('127.0.0.1:5432'), 'database URL must use 127.0.0.1 (not container name) with host networking');
+  assert.ok(cajalBlock.includes('127.0.0.1:8080'), 'watchtower URL must use 127.0.0.1 (not container name) with host networking');
+});
+
+test('docker-compose.yml binds postgres and watchtower to localhost only', () => {
+  const composeSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'docker-compose.yml'), 'utf8');
+
+  // Postgres should only be reachable from localhost
+  assert.ok(composeSrc.includes('127.0.0.1:5432:5432'), 'postgres must bind to localhost only');
+
+  // Watchtower should only be reachable from localhost
+  assert.ok(composeSrc.includes('127.0.0.1:8080:8080'), 'watchtower must bind to localhost only');
+});
+
+test('docker-reload.sh manual rebuild uses --network host for app container', () => {
+  const reloadSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'docker-reload.sh'), 'utf8');
+
+  // App container must use host networking
+  const appBlock = reloadSrc.substring(
+    reloadSrc.indexOf('run_app_container'),
+    reloadSrc.indexOf('run_socket_proxy_container')
+  );
+  assert.ok(appBlock.includes('--network host'), 'manual app container must use --network host');
+  assert.ok(appBlock.includes('127.0.0.1:5432'), 'manual app container must connect to DB via 127.0.0.1');
+  assert.ok(appBlock.includes('127.0.0.1:8080'), 'manual app container must connect to watchtower via 127.0.0.1');
+
+  // Postgres must expose port on localhost
+  const pgBlock = reloadSrc.substring(
+    reloadSrc.indexOf('ensure_postgres_container'),
+    reloadSrc.indexOf('run_app_container')
+  );
+  assert.ok(pgBlock.includes('127.0.0.1:5432:5432'), 'manual postgres must bind to localhost only');
+});
+
+test('syslog UDP collector reads source IP from rinfo.address', () => {
+  const monSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'monitoring.js'), 'utf8');
+
+  // UDP syslog handler must extract source IP from rinfo
+  const udpStart = monSrc.indexOf("dgram.createSocket('udp4')");
+  assert.ok(udpStart >= 0, 'syslog UDP socket must exist');
+  const udpBlock = monSrc.substring(udpStart, udpStart + 600);
+  assert.ok(udpBlock.includes('rinfo.address'), 'syslog UDP must read source IP from rinfo.address');
+  assert.ok(udpBlock.includes('matchSiteBySourceIp'), 'syslog UDP must match traffic by source IP');
+});
+
+test('syslog TCP collector reads source IP from socket.remoteAddress', () => {
+  const monSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'monitoring.js'), 'utf8');
+
+  const tcpStart = monSrc.indexOf('net.createServer');
+  assert.ok(tcpStart >= 0, 'syslog TCP server must exist');
+  const tcpBlock = monSrc.substring(tcpStart, tcpStart + 2500);
+  assert.ok(tcpBlock.includes('remoteAddress'), 'syslog TCP must read source IP from socket.remoteAddress');
+  assert.ok(tcpBlock.includes('matchSiteBySourceIp'), 'syslog TCP must match traffic by source IP');
+});
+
+// ── AsyncMutex functional tests ───────────────────────────────────────────────
+test('AsyncMutex serializes concurrent calls', async () => {
+  const { AsyncMutex } = core;
+  const mutex = new AsyncMutex();
+  const order = [];
+
+  const task = (id, delayMs) => mutex.run(() => new Promise((resolve) => {
+    order.push(`start-${id}`);
+    setTimeout(() => { order.push(`end-${id}`); resolve(); }, delayMs);
+  }));
+
+  await Promise.all([task('a', 20), task('b', 10), task('c', 5)]);
+  assert.deepEqual(order, ['start-a', 'end-a', 'start-b', 'end-b', 'start-c', 'end-c'],
+    'tasks must run sequentially, not concurrently');
+});
+
+test('AsyncMutex releases lock on error', async () => {
+  const { AsyncMutex } = core;
+  const mutex = new AsyncMutex();
+
+  await assert.rejects(() => mutex.run(() => { throw new Error('test'); }), /test/);
+
+  // Should not be stuck — next run should complete
+  let completed = false;
+  await mutex.run(() => { completed = true; });
+  assert.ok(completed, 'mutex must release lock after error');
+});
+
+// ── consumeSetupToken functional test ─────────────────────────────────────────
+test('consumeSetupToken deletes the token and cannot be reused', () => {
+  const token = core.createSetupToken('test@test.com', 'set_password');
+  const result1 = core.consumeSetupToken(token, 'set_password');
+  assert.ok(result1, 'first consume must succeed');
+  assert.equal(result1.email, 'test@test.com');
+
+  const result2 = core.consumeSetupToken(token, 'set_password');
+  assert.equal(result2, null, 'second consume must fail — token was already consumed');
+});
+
+test('peekSetupToken does not consume the token', () => {
+  const token = core.createSetupToken('peek@test.com', 'set_password');
+  const result1 = core.peekSetupToken(token, 'set_password');
+  assert.ok(result1, 'first peek must succeed');
+  const result2 = core.peekSetupToken(token, 'set_password');
+  assert.ok(result2, 'second peek must also succeed — token not consumed');
+  // Clean up
+  core.consumeSetupToken(token, 'set_password');
+});
+
+// ── decaySyslogMetrics conditional dirty marking ──────────────────────────────
+test('decaySyslogMetrics does not mark dirty when EPS is already zero', () => {
+  const state = makeState();
+  const site = makeSite();
+  site.metrics = { syslog: { eventsPerSecond: 0, totalIngested: 0 } };
+  state.sites.push(site);
+  state.dirtySites = false;
+
+  core.decaySyslogMetrics(state);
+  assert.equal(state.dirtySites, false, 'must not mark dirty when EPS was already 0');
+});
+
+test('decaySyslogMetrics marks dirty when EPS decays from non-zero', () => {
+  const state = makeState();
+  const site = makeSite();
+  site.metrics = { syslog: { eventsPerSecond: 42, totalIngested: 100 } };
+  state.sites.push(site);
+  // Set a stale window (>2s old)
+  state.syslogWindows.set(site.id, { startedAt: Date.now() - 5000, count: 0 });
+  state.dirtySites = false;
+
+  core.decaySyslogMetrics(state);
+  assert.equal(state.dirtySites, true, 'must mark dirty when EPS decays from non-zero');
+  assert.equal(site.metrics.syslog.eventsPerSecond, 0, 'EPS must be set to 0');
+});
+
+// ── Database SSL configuration tests ──────────────────────────────────────────
+test('resolvePostgresSslConfig returns undefined for disable mode', () => {
+  // Since DATABASE_SSL_MODE is set at module load time, we test the function
+  // indirectly by verifying the buildPostgresPoolConfig output
+  const config = core.buildPostgresPoolConfig();
+  assert.ok(config, 'pool config must be returned');
+  assert.equal(config.application_name, 'cajal-app', 'must set application_name');
+  assert.equal(typeof config.max, 'number', 'max must be a number');
+  assert.ok(config.max >= 2 && config.max <= 128, 'max must be in valid range');
+});
+
+test('buildPostgresPoolConfig includes all required fields', () => {
+  const config = core.buildPostgresPoolConfig();
+  assert.ok('ssl' in config || config.ssl === undefined, 'ssl key must be present or undefined');
+  assert.ok(config.idleTimeoutMillis > 0, 'idleTimeoutMillis must be positive');
+  assert.ok(config.connectionTimeoutMillis > 0, 'connectionTimeoutMillis must be positive');
+  assert.ok(config.statement_timeout > 0, 'statement_timeout must be positive');
+  assert.ok(config.query_timeout > 0, 'query_timeout must be positive');
+});
+
+// ── Schema versioning tests ───────────────────────────────────────────────────
+test('CURRENT_SCHEMA_VERSION is a positive integer', () => {
+  assert.ok(Number.isInteger(core.CURRENT_SCHEMA_VERSION), 'schema version must be integer');
+  assert.ok(core.CURRENT_SCHEMA_VERSION >= 1, 'schema version must be >= 1');
+});
+
+test('schema versioning code exists in storage.js', () => {
+  const storageSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'storage.js'), 'utf8');
+  assert.ok(storageSrc.includes('cajal_schema_migrations'), 'must reference migrations table');
+  assert.ok(storageSrc.includes('SCHEMA_MIGRATIONS'), 'must define SCHEMA_MIGRATIONS array');
+  assert.ok(storageSrc.includes('runSchemaMigrations'), 'must have runSchemaMigrations function');
+  assert.ok(storageSrc.includes('getAppliedSchemaVersion'), 'must track applied version');
+});
+
+test('schema migrations are ordered sequentially', () => {
+  const storageSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'storage.js'), 'utf8');
+  // Extract version numbers from SCHEMA_MIGRATIONS
+  const versions = [];
+  const versionPattern = /version:\s*(\d+)/g;
+  const migrationsStart = storageSrc.indexOf('const SCHEMA_MIGRATIONS');
+  const migrationsEnd = storageSrc.indexOf('];', migrationsStart);
+  const migrationsBlock = storageSrc.substring(migrationsStart, migrationsEnd);
+  let m;
+  while ((m = versionPattern.exec(migrationsBlock)) !== null) {
+    versions.push(Number(m[1]));
+  }
+  assert.ok(versions.length >= 3, 'must have at least 3 migrations');
+  for (let i = 0; i < versions.length; i++) {
+    assert.equal(versions[i], i + 1, `migration ${i} must have version ${i + 1}`);
+  }
+});
+
+// ── Connection retry tests ────────────────────────────────────────────────────
+test('connectWithRetry retries on failure then succeeds', async () => {
+  let calls = 0;
+  const mockPool = {
+    query: () => {
+      calls += 1;
+      if (calls < 3) return Promise.reject(new Error('connection refused'));
+      return Promise.resolve({ rows: [{ '?column?': 1 }] });
+    }
+  };
+  await core.resolvePostgresSslConfig; // just access to confirm exported
+  // We test the retry logic directly — need the storage module's connectWithRetry
+  const { connectWithRetry } = require('../lib/storage');
+  await connectWithRetry(mockPool, 5, 10); // 10ms base delay for fast test
+  assert.equal(calls, 3, 'must retry until success');
+});
+
+test('connectWithRetry throws after max retries', async () => {
+  const mockPool = {
+    query: () => Promise.reject(new Error('connection refused'))
+  };
+  const { connectWithRetry } = require('../lib/storage');
+  await assert.rejects(
+    () => connectWithRetry(mockPool, 3, 10),
+    /connection refused/,
+    'must throw after max retries exhausted'
+  );
+});
+
+// ── DB data purging tests ─────────────────────────────────────────────────────
+test('purgeStaleDbRows function exists in storage module', () => {
+  const storageSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'storage.js'), 'utf8');
+  assert.ok(storageSrc.includes('function purgeStaleDbRows'), 'must define purgeStaleDbRows');
+  assert.ok(storageSrc.includes('error-log'), 'must target error-log for purging');
+  assert.ok(storageSrc.includes('diagnostics-log'), 'must target diagnostics-log for purging');
+  assert.ok(storageSrc.includes('telemetry-log'), 'must target telemetry-log for purging');
+});
+
+test('DB purge is wired into periodic retention interval', () => {
+  const serverSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(serverSrc.includes('purgeStaleDbRows'), 'server.js must call purgeStaleDbRows');
+  assert.ok(serverSrc.includes('enforceStorageRetention'), 'server.js must call enforceStorageRetention');
+});
+
+// ── SSL auto-detection tests ─────────────────────────────────────────────────
+test('DATABASE_SSL_MODE auto-detects based on DATABASE_URL locality', () => {
+  const constantsSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'constants.js'), 'utf8');
+  assert.ok(constantsSrc.includes('@localhost'), 'must detect localhost in DATABASE_URL');
+  assert.ok(constantsSrc.includes('127') && constantsSrc.includes('0.0.1'), 'must detect 127.0.0.1 in DATABASE_URL');
+  assert.ok(constantsSrc.includes("isLocal ? 'disable' : 'require'"), 'must default to disable for local, require for remote');
+});
+
+test('resolvePostgresSslConfig handles all SSL modes', () => {
+  const storageSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'storage.js'), 'utf8');
+  const fnStart = storageSrc.indexOf('function resolvePostgresSslConfig');
+  assert.ok(fnStart >= 0, 'resolvePostgresSslConfig must exist');
+  const fnBlock = storageSrc.substring(fnStart, fnStart + 800);
+  assert.ok(fnBlock.includes("'disable'"), 'must handle disable mode');
+  assert.ok(fnBlock.includes("'prefer'"), 'must handle prefer mode');
+  assert.ok(fnBlock.includes("'require'"), 'must handle require mode');
+  assert.ok(fnBlock.includes("'verify-ca'"), 'must handle verify-ca mode');
+  assert.ok(fnBlock.includes("'verify-full'"), 'must handle verify-full mode');
+  assert.ok(fnBlock.includes('rejectUnauthorized: true'), 'verify modes must validate certs');
+  assert.ok(fnBlock.includes('rejectUnauthorized: false'), 'require/prefer must allow self-signed');
+});

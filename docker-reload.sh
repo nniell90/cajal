@@ -156,6 +156,7 @@ ensure_postgres_container() {
     -e POSTGRES_USER="$db_user" \
     -e POSTGRES_PASSWORD="$db_pass" \
     -v "$DB_VOLUME:/var/lib/postgresql/data" \
+    -p 127.0.0.1:5432:5432 \
     --health-cmd "pg_isready -U $db_user -d $db_name" \
     --health-interval 5s \
     --health-timeout 3s \
@@ -175,19 +176,15 @@ run_app_container() {
   docker rm -f "$APP_CONTAINER" >/dev/null 2>&1 || true
   docker run -d \
     --name "$APP_CONTAINER" \
-    --network "$NETWORK_NAME" \
+    --network host \
     --restart unless-stopped \
     --label com.centurylinklabs.watchtower.enable=true \
     --env-file .env \
     -e PORT=4000 \
     -e CAJAL_STORAGE_BACKEND=postgres \
-    -e CAJAL_DATABASE_URL="postgresql://${db_user}:${db_pass}@${DB_CONTAINER}:5432/${db_name}" \
+    -e CAJAL_DATABASE_URL="postgresql://${db_user}:${db_pass}@127.0.0.1:5432/${db_name}" \
     -e CAJAL_DATABASE_SSL=disable \
-    -e CAJAL_WATCHTOWER_URL=http://"$WATCHTOWER_CONTAINER":8080 \
-    -p 4000:4000 \
-    -p 5514:5514/udp \
-    -p 5514:5514/tcp \
-    -p 2055:2055/udp \
+    -e CAJAL_WATCHTOWER_URL=http://127.0.0.1:8080 \
     -v "$ROOT_DIR/data:/app/data" \
     "$APP_IMAGE" >/dev/null
 }
@@ -217,6 +214,7 @@ run_watchtower_container() {
     --name "$WATCHTOWER_CONTAINER" \
     --network "$NETWORK_NAME" \
     --restart unless-stopped \
+    -p 127.0.0.1:8080:8080 \
     -e DOCKER_HOST=tcp://"$SOCKET_PROXY_CONTAINER":2375 \
     -e WATCHTOWER_HTTP_API_TOKEN="$token" \
     -e WATCHTOWER_LABEL_ENABLE=true \

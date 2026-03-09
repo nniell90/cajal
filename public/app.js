@@ -5003,12 +5003,14 @@ function lanLinkMonitorCard(site, metrics) {
   }).join('');
 
   const hasData = totalCount > 0;
+  const allowDelete = canManage();
   return `
     <article class="site-tile lan-link-card${hasData ? '' : ' is-device-down'}" data-site-id="${escapeHtml(site.id)}">
       <div class="site-top">
         <div class="site-details">
           <span class="lan-links-badge${hasData ? '' : ' down'}">LAN LINKS</span>
         </div>
+        ${allowDelete ? `<div class="top-controls"><button type="button" class="ghost-btn delete-device" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name || site.id)}">DELETE</button></div>` : ''}
       </div>
       <h4 class="metric-card-head">
         <span>LAN LINK MONITOR — ${escapeHtml(site.name)}</span>
@@ -7542,7 +7544,9 @@ addDeviceForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!canAdmin()) return;
   const name = String(addDeviceName?.value || '').trim();
-  const role = normalizeRole(addDeviceType?.value || 'firewall');
+  const rawType = String(addDeviceType?.value || 'firewall').trim().toLowerCase();
+  const isLanLinks = rawType === 'lan-links';
+  const role = isLanLinks ? 'other' : normalizeRole(rawType);
   const category = String(pendingAddDeviceCategory || '').trim().toLowerCase();
   if (!name || !category) return;
   try {
@@ -7557,6 +7561,13 @@ addDeviceForm?.addEventListener('submit', async (event) => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role })
+      });
+    }
+    if (siteId && isLanLinks) {
+      await getJson(`/api/sites/${encodeURIComponent(siteId)}/monitors/snmp`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true, config: {} })
       });
     }
     addDeviceDialog?.close();

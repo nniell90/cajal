@@ -659,8 +659,7 @@ test('SNMP poller calls runSnmpWalk for interface table after successful uptime 
   assert.ok(pollerBlock.includes('_ifTableSnapshots'), 'poller must track snapshots for delta calculation');
 });
 
-test('login page has First-Time Setup link', () => {
+test('login page does not expose First-Time Setup link', () => {
   const loginHtml = readFile('public/login.html');
-  assert.ok(loginHtml.includes('registerBtn'), 'login page must have registerBtn element');
-  assert.ok(loginHtml.includes('First-Time Setup'), 'login page must show First-Time Setup text');
+  assert.ok(!loginHtml.includes('First-Time Setup'), 'login page must not show First-Time Setup text');
 });

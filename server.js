@@ -436,7 +436,6 @@ const {
   makeSiteId,
   makeSectionId,
   createSiteTemplate,
-  siteFromSeed,
   normalizeImportedSite,
   clone,
   loadSites,
@@ -639,48 +638,9 @@ const {
 const { createHttpHandler } = require('./lib/router');
 const { pruneTotpLastUsedStep } = require('./lib/routes/auth');
 
-const defaultSiteSeeds = [
-  ['site-hq', 'HQ', 'Primary office edge and core connectivity.', 'internal', 'HQ Edge Firewall', 'up', '203.0.113.12', true, ['noc@cajal.local', 'infra@cajal.local'], '2026-02-12T14:05:00.000Z', [true, 'udp', 'syslog-hq-token', '2026-02-18T15:20:00.000Z'], [true, '10.0.0.1', 'public-hq', '2026-02-16T17:10:00.000Z'], [true, 'HQ-FW-01', 'netflow-hq-secret', '2026-02-19T12:45:00.000Z'], [100, 100, 99.96, 100, 99.92, 100, 99.98, 99.95, 100, 100, 99.9, 99.97, 100, 100], '67d 04h', ['10 min ago', 942, 901, 4], ['40 min ago', 934, 887, 5]],
-  ['site-win11', 'WIN11-DESKTOP', 'Windows 11 desktop collector host.', 'internal', 'WIN11-DESKTOP Firewall', 'down', '203.0.113.36', true, ['labops@cajal.local'], '2026-02-11T09:20:00.000Z', [true, 'tcp', 'syslog-lab-token', '2026-02-15T10:35:00.000Z'], [true, '10.0.50.1', 'public-lab', '2026-02-14T09:05:00.000Z'], [false, 'LAB-FW-01', 'netflow-lab-secret', '2026-02-13T18:50:00.000Z'], [99.2, 98.9, 99.1, 98.7, 98.4, 97.8, 98.2, 99.0, 98.6, 99.1, 98.8, 98.3, 98.9, 99.0], '11d 18h', ['8 min ago', 516, 201, 12], ['38 min ago', 492, 193, 14]]
-];
-
 const defaultData = {
-  sites: defaultSiteSeeds.map(siteFromSeed),
-  devices: [
-    {
-      id: 'fw-001',
-      name: 'Edge Firewall',
-      type: 'Firewall',
-      siteId: 'site-hq',
-      ip: '10.0.0.1',
-      status: 'up',
-      cpu: 46,
-      memory: 61,
-      lastSeen: new Date().toISOString()
-    },
-    {
-      id: 'col-001',
-      name: 'HQ Collector',
-      type: 'Collector',
-      siteId: 'site-hq',
-      ip: '10.0.0.10',
-      status: 'up',
-      cpu: 12,
-      memory: 34,
-      lastSeen: new Date().toISOString()
-    },
-    {
-      id: 'col-002',
-      name: 'WIN11-HOST',
-      type: 'Collector',
-      siteId: 'site-hq',
-      ip: '10.0.0.11',
-      status: 'up',
-      cpu: 8,
-      memory: 28,
-      lastSeen: new Date().toISOString()
-    }
-  ]
+  sites: [],
+  devices: []
 };
 
 const defaultUsers = [

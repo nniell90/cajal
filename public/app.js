@@ -1695,7 +1695,10 @@ function applyAuthUi() {
     topRoleBadge.textContent = roleLabel;
     topRoleBadge.className = `top-role-badge ${roleLabel}`;
   }
-  if (authActionBtn) authActionBtn.textContent = user.authenticated ? 'Logout' : 'Login';
+  if (authActionBtn) {
+    const displayName = user.displayName || user.email || '';
+    authActionBtn.textContent = user.authenticated ? `${displayName} · Logout` : 'Login';
+  }
   if (ssoStatusLine) {
     ssoStatusLine.textContent = authState.config?.enabled
       ? 'SSO: Entra configured'
@@ -4827,27 +4830,7 @@ function siteTile(site) {
                 data-site-id="${escapeHtml(site.id)}"
                 aria-label="Edit details for ${escapeHtml(site.name)}"
               >EDIT</button>
-              ${isCollectorRole
-                ? `
-                <button
-                type="button"
-                class="flow flow-btn notify-toggle ${notifications.enabled ? 'enabled' : 'disabled'}"
-                data-site-id="${escapeHtml(site.id)}"
-                aria-label="Toggle Teams notifications for ${escapeHtml(site.name)}"
-              >
-                Teams ${notifications.enabled ? 'ON' : 'OFF'}
-              </button>
               `
-                : `
-              <button
-                type="button"
-                class="flow flow-btn notify-toggle ${notifications.enabled ? 'enabled' : 'disabled'}"
-                data-site-id="${escapeHtml(site.id)}"
-                aria-label="Toggle Teams notifications for ${escapeHtml(site.name)}"
-              >
-                Teams ${notifications.enabled ? 'ON' : 'OFF'}
-              </button>
-              `}`
                 : `${isCollectorRole
                   ? `
               <button
@@ -4858,33 +4841,8 @@ function siteTile(site) {
                 aria-label="Show collector details for ${escapeHtml(site.name)}"
               >DETAILS</button>
               `
-                  : ''}
-              <button
-                type="button"
-                class="flow flow-btn notify-toggle ${notifications.enabled ? 'enabled' : 'disabled'}"
-                data-site-id="${escapeHtml(site.id)}"
-                aria-label="Toggle Teams notifications for ${escapeHtml(site.name)}"
-              >
-                Teams ${notifications.enabled ? 'ON' : 'OFF'}
-              </button>`}
+                  : ''}`}
             </div>
-            ${notifyEditable
-              ? `
-              <form class="notify-form" data-site-id="${escapeHtml(site.id)}">
-                <label class="notify-input-label">
-                  Teams Notes
-                  <input
-                    name="recipients"
-                    value="${escapeHtml(recipients.join(', '))}"
-                    placeholder="optional notes/tags"
-                  />
-                </label>
-                <button type="submit" class="notify-save">Save</button>
-                <button type="button" class="test-notify" data-site-id="${escapeHtml(site.id)}">Test Notify</button>
-                <span class="notify-save-msg"></span>
-              </form>
-              `
-              : `<p class="notify-readonly">Notify: <strong>${escapeHtml(recipients.join(', ') || 'Unassigned')}</strong></p>`}
             ${isCollectorRole && collectorDetailsExpanded
               ? `
               <div class="collector-details-panel" role="region" aria-label="Collector details">
@@ -5000,8 +4958,74 @@ function siteTile(site) {
               : ''}
           </div>
         </article>
+
+        ${lanLinkMonitorCard(site, metrics)}
         `}
       </div>
+    </article>
+  `;
+}
+
+function formatIfSpeed(bps) {
+  if (!bps || bps <= 0) return 'N/A';
+  if (bps >= 1000000000) return `${(bps / 1000000000).toFixed(bps % 1000000000 === 0 ? 0 : 1)} Gbps`;
+  if (bps >= 1000000) return `${(bps / 1000000).toFixed(0)} Mbps`;
+  if (bps >= 1000) return `${(bps / 1000).toFixed(0)} Kbps`;
+  return `${bps} bps`;
+}
+
+function lanLinkMonitorCard(site, metrics) {
+  const interfaces = metrics.snmp?.interfaces || [];
+  const cfg = site.monitorConfig?.snmp || {};
+  if (!cfg.enabled) return '';
+  const upCount = interfaces.filter((i) => i.ifOperStatus === 'up').length;
+  const downCount = interfaces.filter((i) => i.ifOperStatus === 'down').length;
+  const totalCount = interfaces.length;
+  const maxMbps = interfaces.reduce((m, i) => Math.max(m, i.totalMbps || 0), 0) || 1;
+  const lastPoll = metrics.snmp?.lastInterfacePoll ? new Date(metrics.snmp.lastInterfacePoll).toLocaleTimeString() : 'Never';
+  const pollMs = metrics.snmp?.interfacePollMs || 0;
+
+  const rows = interfaces.map((iface) => {
+    const barWidth = maxMbps > 0 ? Math.max(1, Math.round(((iface.totalMbps || 0) / maxMbps) * 100)) : 0;
+    const utilColor = (iface.utilization || 0) > 80 ? 'var(--down)' : (iface.utilization || 0) > 50 ? 'var(--warn)' : 'var(--accent)';
+    return `<tr>
+      <td>${escapeHtml(iface.ifDescr)}</td>
+      <td class="lan-link-status ${escapeHtml(iface.ifOperStatus)}">${escapeHtml(iface.ifOperStatus?.toUpperCase())}</td>
+      <td>${escapeHtml(formatIfSpeed(iface.ifSpeed))}</td>
+      <td>${escapeHtml(String(iface.inMbps ?? 0))}</td>
+      <td>${escapeHtml(String(iface.outMbps ?? 0))}</td>
+      <td><strong>${escapeHtml(String(iface.totalMbps ?? 0))}</strong></td>
+      <td>${escapeHtml(String(iface.utilization ?? 0))}%</td>
+      <td><span class="lan-link-bar" style="width:${barWidth}%;background:${utilColor}"></span></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <article class="metric-card lan-link-card">
+      <h4 class="metric-card-head">
+        <span>LAN LINK MONITOR</span>
+        <span class="signal-flow-chip metric-head-flow ${totalCount > 0 ? 'flow-on' : 'flow-off'}">${totalCount > 0 ? `${upCount} UP / ${downCount} DN` : 'NO DATA'}</span>
+      </h4>
+      ${totalCount > 0
+        ? `
+      <table class="lan-link-table">
+        <thead><tr>
+          <th>Interface</th>
+          <th>Status</th>
+          <th>Speed</th>
+          <th>In Mbps</th>
+          <th>Out Mbps</th>
+          <th>Total</th>
+          <th>Util %</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="margin-top:auto;padding-top:0.2rem;font-size:0.6rem;color:var(--muted)">
+        ${escapeHtml(String(totalCount))} interfaces · Poll: ${escapeHtml(lastPoll)} (${escapeHtml(String(pollMs))}ms)
+      </p>
+      `
+        : `<p class="lan-link-empty">Enable SNMP to monitor LAN interfaces</p>`}
     </article>
   `;
 }
@@ -5272,6 +5296,15 @@ closeSettingsBtn?.addEventListener('click', () => {
 });
 
 settingsPanel?.addEventListener('click', (event) => {
+  const tabBtn = event.target.closest('.settings-tab');
+  if (tabBtn && tabBtn.dataset.tab) {
+    settingsPanel.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+    settingsPanel.querySelectorAll('.settings-tab-content').forEach(d => d.classList.remove('active'));
+    tabBtn.classList.add('active');
+    const target = settingsPanel.querySelector(`.settings-tab-content[data-settings-tab="${tabBtn.dataset.tab}"]`);
+    if (target) target.classList.add('active');
+    return;
+  }
   const toggle = event.target.closest('.settings-toggle');
   if (!toggle) return;
   const section = toggle.closest('.settings-section');
@@ -7624,10 +7657,8 @@ let appVersion = '';
 
 function maybeShowWelcomeDialog(version) {
   appVersion = String(version || '');
-  if (!welcomeDialog || typeof welcomeDialog.showModal !== 'function') return;
-  const key = `cajal_welcomed_v${appVersion || 'default'}`;
-  if (localStorage.getItem(key)) return;
-  if (!welcomeDialog.open) welcomeDialog.showModal();
+  // Disabled — no first-time popups on fresh install
+  return;
 }
 
 function dismissWelcomeDialog() {
@@ -7660,10 +7691,8 @@ async function markWizardComplete() {
 }
 
 function maybeShowSetupWizard() {
-  if (!canAdmin()) return;
-  if (runtimeConfigState.setupWizardCompleted) return;
-  if (!setupWizardDialog || typeof setupWizardDialog.showModal !== 'function') return;
-  if (!setupWizardDialog.open) setupWizardDialog.showModal();
+  // Disabled — fresh installs start clean; admins configure via Settings panel
+  return;
 }
 
 wizardStep1Next?.addEventListener('click', async () => {

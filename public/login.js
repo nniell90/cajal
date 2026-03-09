@@ -114,13 +114,8 @@ function startLoginRefreshPulse(refreshMs) {
 async function boot() {
   try {
     const state = await getJson('/api/auth/me');
-    if (state?.user?.authenticated) {
-      window.location.replace('/');
-      return;
-    }
     startLoginRefreshPulse(state?.runtime?.globalDataRefreshMs);
   } catch {
-    // ignore boot check errors on login page
     startLoginRefreshPulse(60000);
   }
 }

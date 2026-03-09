@@ -157,6 +157,12 @@ body[data-ui-theme="slate-neon"] {
   color: var(--muted);
 }
 
+.login-setup-link {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 .login-form {
   display: grid;
   gap: 0.38rem;
@@ -708,6 +714,43 @@ body[data-ui-theme="slate-neon"] {
   justify-content: flex-end;
   align-items: center;
   gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.18rem;
+  margin-left: 0.5rem;
+}
+
+.settings-tab {
+  background: rgba(120, 71, 38, 0.25);
+  color: #d6b198;
+  border: 1px solid rgba(214, 141, 91, 0.35);
+  padding: 0.22rem 0.55rem;
+  font-size: 0.64rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.settings-tab:hover {
+  background: rgba(150, 86, 35, 0.38);
+  color: #ffe5d0;
+}
+
+.settings-tab.active {
+  background: rgba(182, 106, 47, 0.45);
+  color: #ffe5d0;
+  border-color: rgba(214, 141, 91, 0.7);
+}
+
+.settings-tab-content {
+  display: none;
+}
+
+.settings-tab-content.active {
+  display: block;
 }
 
 .settings-panel-head h3 {
@@ -4535,6 +4578,61 @@ body[data-ui-theme="slate-neon"] .metric-card {
 .netflow-metric-card {
   display: flex;
   flex-direction: column;
+}
+
+.lan-link-card {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.lan-link-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  margin-top: 0.25rem;
+}
+
+.lan-link-table th {
+  text-align: left;
+  padding: 0.18rem 0.3rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lan-link-table td {
+  padding: 0.15rem 0.3rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.lan-link-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.lan-link-status { font-weight: 600; }
+.lan-link-status.up { color: var(--up); }
+.lan-link-status.down { color: var(--down); }
+
+.lan-link-bar {
+  display: inline-block;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--accent);
+  min-width: 1px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.lan-link-empty {
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 0.5rem 0;
+  text-align: center;
 }
 
 .netflow-troublemakers-row {

@@ -1422,9 +1422,11 @@ test('login.html does not include app.js script', () => {
   assert.ok(!loginHtml.includes('app.js'), 'login.html must not load app.js to prevent redirect loops');
 });
 
-test('login.js only redirects when authenticated', () => {
+test('login.js boot() does not auto-redirect to index (handled by index.html guard)', () => {
   const loginJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'login.js'), 'utf8');
-  assert.match(loginJs, /state\?\.user\?\.authenticated/, 'login page must check authenticated before redirecting');
+  const bootMatch = loginJs.match(/async function boot\(\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(bootMatch, 'boot() function must exist in login.js');
+  assert.ok(!bootMatch[0].includes("window.location.replace('/')"), 'boot() must not redirect to / to avoid redirect loops');
 });
 
 // ── Semver Comparison Tests ────────────────────────────────────────────────
@@ -2049,4 +2051,60 @@ test('resolvePostgresSslConfig handles all SSL modes', () => {
   assert.ok(fnBlock.includes("'verify-full'"), 'must handle verify-full mode');
   assert.ok(fnBlock.includes('rejectUnauthorized: true'), 'verify modes must validate certs');
   assert.ok(fnBlock.includes('rejectUnauthorized: false'), 'require/prefer must allow self-signed');
+});
+
+// ── SNMP Interface Table Parsing & Delta Tests ──────────────────────────────
+
+const { parseIfTableWalk, computeInterfaceDeltas } = require('../lib/monitoring');
+
+test('parseIfTableWalk extracts interfaces from snmpwalk output', () => {
+  const output = [
+    '.1.3.6.1.2.1.2.2.1.2.1 eth0',
+    '.1.3.6.1.2.1.2.2.1.2.2 eth1',
+    '.1.3.6.1.2.1.2.2.1.5.1 1000000000',
+    '.1.3.6.1.2.1.2.2.1.5.2 100000000',
+    '.1.3.6.1.2.1.2.2.1.8.1 1',
+    '.1.3.6.1.2.1.2.2.1.8.2 2',
+    '.1.3.6.1.2.1.2.2.1.10.1 5000000',
+    '.1.3.6.1.2.1.2.2.1.10.2 1000000',
+    '.1.3.6.1.2.1.2.2.1.16.1 3000000',
+    '.1.3.6.1.2.1.2.2.1.16.2 500000'
+  ].join('\n');
+  const result = parseIfTableWalk(output);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].ifDescr, 'eth0');
+  assert.equal(result[0].ifSpeed, 1000000000);
+  assert.equal(result[0].ifOperStatus, 'up');
+  assert.equal(result[0].ifInOctets, 5000000);
+  assert.equal(result[0].ifOutOctets, 3000000);
+  assert.equal(result[1].ifDescr, 'eth1');
+  assert.equal(result[1].ifOperStatus, 'down');
+});
+
+test('computeInterfaceDeltas calculates bandwidth from counter differences', () => {
+  const prev = [{ ifIndex: 1, ifDescr: 'eth0', ifSpeed: 1000000000, ifOperStatus: 'up', ifInOctets: 1000000, ifOutOctets: 500000 }];
+  const curr = [{ ifIndex: 1, ifDescr: 'eth0', ifSpeed: 1000000000, ifOperStatus: 'up', ifInOctets: 2000000, ifOutOctets: 1500000 }];
+  const result = computeInterfaceDeltas(curr, prev, 60000); // 60 seconds
+  assert.equal(result.length, 1);
+  assert.ok(result[0].inMbps > 0, 'inMbps should be positive');
+  assert.ok(result[0].outMbps > 0, 'outMbps should be positive');
+  assert.ok(result[0].totalMbps > 0, 'totalMbps should be positive');
+  assert.ok(result[0].utilization >= 0 && result[0].utilization <= 100, 'utilization should be 0-100');
+});
+
+test('computeInterfaceDeltas handles 32-bit counter wrap', () => {
+  const prev = [{ ifIndex: 1, ifDescr: 'eth0', ifSpeed: 1000000000, ifOperStatus: 'up', ifInOctets: 4294967290, ifOutOctets: 0 }];
+  const curr = [{ ifIndex: 1, ifDescr: 'eth0', ifSpeed: 1000000000, ifOperStatus: 'up', ifInOctets: 100, ifOutOctets: 0 }];
+  const result = computeInterfaceDeltas(curr, prev, 60000);
+  assert.ok(result[0].inMbps >= 0, 'should handle counter wrap gracefully (no negative values)');
+  // Wrap delta is 106 bytes — verify it did not produce a huge negative Mbps value
+  assert.ok(result[0].inMbps < 1, 'small wrap should produce small bandwidth');
+});
+
+test('computeInterfaceDeltas returns zeros with no previous data', () => {
+  const curr = [{ ifIndex: 1, ifDescr: 'eth0', ifSpeed: 1000000000, ifOperStatus: 'up', ifInOctets: 5000000, ifOutOctets: 3000000 }];
+  const result = computeInterfaceDeltas(curr, null, 0);
+  assert.equal(result[0].inMbps, 0);
+  assert.equal(result[0].outMbps, 0);
+  assert.equal(result[0].totalMbps, 0);
 });

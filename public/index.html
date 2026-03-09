@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cajal ICBM</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script>
+      // Synchronous auth check — blocks parser so nothing renders if not logged in
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/auth/me', false);
+        xhr.send();
+        var s = JSON.parse(xhr.responseText);
+        if (!s || !s.user || !s.user.authenticated) window.location.replace('/login.html');
+      } catch (e) { window.location.replace('/login.html'); }
+    </script>
   </head>
   <body>
     <header class="topbar">
@@ -51,335 +61,358 @@
     <section id="settingsPanel" class="settings-panel" hidden>
       <div class="settings-panel-head">
         <h3>Settings</h3>
+        <nav class="settings-tabs">
+          <button type="button" class="settings-tab active" data-tab="general">General</button>
+          <button type="button" class="settings-tab" data-tab="security">Security</button>
+          <button type="button" class="settings-tab" data-tab="notifications">Notifications</button>
+          <button type="button" class="settings-tab" data-tab="system">System</button>
+        </nav>
         <button id="closeSettingsBtn" type="button" class="ghost-btn">Close</button>
       </div>
-      <section id="userAdminPanel" class="user-admin-panel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>1. User Management</span></button>
-        <div class="settings-content">
-          <div id="userList" class="user-list"></div>
-          <form id="addUserForm" class="add-user-form">
-            <input name="email" type="text" placeholder="username or user@example.com" required />
-            <input name="displayName" type="text" placeholder="Display Name (optional)" />
-            <select name="role">
-              <option value="monitor">Monitor</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button type="submit">Add User</button>
-          </form>
-          <p id="userAdminMsg"></p>
-        </div>
-      </section>
-      <section id="locationAdminPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>2. Location Management</span></button>
-        <div class="settings-content">
-          <form id="locationConfigForm" class="settings-compact-form">
-            <label>Company Name
-              <input name="companyName" placeholder="My Organization" />
-            </label>
-            <label>Location 1 Title
-              <input name="internalName" placeholder="Location 1" />
-            </label>
-            <label>Location 2 Title
-              <input name="customerName" placeholder="Location 2" />
-            </label>
-            <button type="submit">Save Location Labels</button>
-          </form>
-          <div id="locationSectionList" class="location-list"></div>
-          <p id="locationAdminMsg"></p>
-        </div>
-      </section>
-      <section id="ssoConfigPanel" class="sso-config-panel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>3. SSO Configuration</span></button>
-        <div class="settings-content">
-          <p id="ssoStatusLine">SSO: Not configured</p>
-          <p id="systemDepsLine" class="system-deps-line">System CLI Dependency: Checking...</p>
-          <div class="settings-actions">
-            <button id="ssoLoginBtn" type="button">Login with Entra</button>
-            <button id="syncNowBtn" type="button" class="ghost-btn">Sync Now</button>
+
+      <!-- ═══ GENERAL TAB ═══ -->
+      <div class="settings-tab-content active" data-settings-tab="general">
+        <section id="clockConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Clock Settings</span></button>
+          <div class="settings-content">
+            <form id="clockConfigForm" class="settings-compact-form">
+              <label>Time Zone
+                <input name="globalClockTimeZone" placeholder="IANA, e.g. America/Chicago" />
+              </label>
+              <label>Display Format
+                <select name="globalClockHourMode">
+                  <option value="24h">24-hour</option>
+                  <option value="12h">12-hour</option>
+                </select>
+              </label>
+              <button type="submit">Save Clock Settings</button>
+            </form>
+            <p id="clockConfigMsg"></p>
           </div>
-          <form id="ssoConfigForm" class="sso-config-form">
-            <input name="tenantId" placeholder="Tenant ID" />
-            <input name="clientId" placeholder="Client ID" />
-            <input name="clientSecret" type="password" placeholder="Client Secret" />
-            <input name="redirectUri" placeholder="Redirect URI" />
-            <input name="scope" placeholder="Scope (openid profile email)" />
-            <button type="submit">Save SSO Config</button>
-          </form>
-          <p id="ssoConfigMsg"></p>
-        </div>
-      </section>
-      <section id="sslConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>4. SSL Certificate</span></button>
-        <div class="settings-content">
-          <form id="sslConfigForm" class="settings-compact-form">
-            <textarea name="certPem" rows="4" placeholder="Certificate PEM"></textarea>
-            <textarea name="keyPem" rows="4" placeholder="Private Key PEM"></textarea>
-            <textarea name="caPem" rows="4" placeholder="CA Chain PEM (optional)"></textarea>
-            <button type="submit">Save SSL Config</button>
-          </form>
-          <p id="sslConfigMsg"></p>
-        </div>
-      </section>
-      <section id="teamsConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>5. Teams Notifications</span></button>
-        <div class="settings-content">
-          <form id="teamsConfigForm" class="settings-compact-form">
-            <label>Teams Webhook URL
-              <input name="teamsWebhookUrl" type="url" placeholder="https://outlook.office.com/webhook/..." />
-            </label>
-            <label>Webhook Timeout (ms)
-              <input name="teamsWebhookTimeoutMs" type="number" min="1000" max="120000" placeholder="8000" />
-            </label>
-            <label>Payload Title
-              <input id="teamsPayloadTitle" type="text" placeholder="[CAJAL TEST] Power Automate webhook" />
-            </label>
-            <label>Payload Group
-              <input id="teamsPayloadGroup" name="teamsPayloadGroup" type="text" placeholder="cajal" />
-            </label>
-            <label>Payload Message
-              <textarea id="teamsPayloadMessage" rows="3" placeholder="This is a test webhook payload from CAJAL."></textarea>
-            </label>
+        </section>
+        <section id="locationAdminPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Location Management</span></button>
+          <div class="settings-content">
+            <form id="locationConfigForm" class="settings-compact-form">
+              <label>Company Name
+                <input name="companyName" placeholder="My Organization" />
+              </label>
+              <label>Location 1 Title
+                <input name="internalName" placeholder="Location 1" />
+              </label>
+              <label>Location 2 Title
+                <input name="customerName" placeholder="Location 2" />
+              </label>
+              <button type="submit">Save Location Labels</button>
+            </form>
+            <div id="locationSectionList" class="location-list"></div>
+            <p id="locationAdminMsg"></p>
+          </div>
+        </section>
+        <section id="backupPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Backup</span></button>
+          <div class="settings-content">
             <div class="settings-actions">
-              <button type="submit">Save Teams Settings</button>
-              <button id="teamsConfigTestBtn" type="button" class="ghost-btn">Send Webhook Test</button>
+              <button id="backupNowBtn" type="button">Back Up Config Now</button>
             </div>
-          </form>
-          <p id="teamsConfigMsg"></p>
-        </div>
-      </section>
-      <section id="webhookRoutingPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>6. Webhook Routing</span></button>
-        <div class="settings-content">
-          <p class="webhook-routing-help">Template tokens: <code>{{status}}</code> <code>{{previousStatus}}</code> <code>{{siteName}}</code> <code>{{siteRole}}</code> <code>{{locationName}}</code> <code>{{reason}}</code> <code>{{detail}}</code> <code>{{routeId}}</code> <code>{{routeLabel}}</code> <code>{{section}}</code> <code>{{signal}}</code> <code>{{timestamp}}</code> <code>{{wanIp1}}</code> <code>{{wanIp2}}</code> <code>{{agentHost}}</code> <code>{{agentLocalIp}}</code> <code>{{agentRemoteIp}}</code> <code>{{serviceLabel}}</code> <code>{{serviceTarget}}</code></p>
-          <div id="webhookRoutingContent" class="webhook-routing-grid"></div>
-          <p id="webhookRoutingMsg"></p>
-        </div>
-      </section>
-      <section id="clockConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>7. Clock Settings</span></button>
-        <div class="settings-content">
-          <form id="clockConfigForm" class="settings-compact-form">
-            <label>Time Zone
-              <input name="globalClockTimeZone" placeholder="IANA, e.g. America/Chicago" />
-            </label>
-            <label>Display Format
-              <select name="globalClockHourMode">
-                <option value="24h">24-hour</option>
-                <option value="12h">12-hour</option>
-              </select>
-            </label>
-            <button type="submit">Save Clock Settings</button>
-          </form>
-          <p id="clockConfigMsg"></p>
-        </div>
-      </section>
-      <section id="systemHealthPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>8. System Health</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <button id="refreshSystemHealthBtn" type="button" class="ghost-btn">Refresh Health</button>
+            <form id="backupRestoreForm" class="settings-compact-form">
+              <label>Backup File
+                <input id="backupFileInput" type="file" accept=".cajalbak,application/json" />
+              </label>
+              <button id="restoreBackupBtn" type="submit">Restore from Backup</button>
+            </form>
+            <p id="backupMsg"></p>
           </div>
-          <div id="versionCheckSection" class="version-check-section"></div>
-          <div id="systemHealthContent" class="system-health-grid"></div>
-          <p id="systemHealthMsg"></p>
-        </div>
-      </section>
-      <section id="backupPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>9. Backup</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <button id="backupNowBtn" type="button">Back Up Config Now</button>
+        </section>
+        <section id="storagePanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Storage</span></button>
+          <div class="settings-content">
+            <div class="settings-actions">
+              <button id="refreshStorageBtn" type="button" class="ghost-btn">Refresh Storage</button>
+              <button id="purgeStorageLogsBtn" type="button" class="ghost-btn">Purge Logs</button>
+            </div>
+            <div id="storageSummaryContent" class="system-health-grid"></div>
+            <pre id="storageViewer" class="settings-log-viewer">No storage summary loaded yet.</pre>
+            <p id="storageMsg"></p>
           </div>
-          <form id="backupRestoreForm" class="settings-compact-form">
-            <label>Backup File
-              <input id="backupFileInput" type="file" accept=".cajalbak,application/json" />
-            </label>
-            <button id="restoreBackupBtn" type="submit">Restore from Backup</button>
-          </form>
-          <p id="backupMsg"></p>
-        </div>
-      </section>
-      <section id="runtimeConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>10. Advanced Options (Ports)</span></button>
-        <div class="settings-content">
-          <form id="runtimeConfigForm" class="settings-compact-form settings-ports-form">
-            <input name="syslogUdpPort" type="number" min="1" max="65535" placeholder="Syslog UDP Port" />
-            <input name="syslogTcpPort" type="number" min="1" max="65535" placeholder="Syslog TCP Port" />
-            <input name="netflowPort" type="number" min="1" max="65535" placeholder="NetFlow Port" />
-            <input name="snmpPollIntervalMs" type="number" min="1000" placeholder="SNMP Poll Interval (ms)" />
-            <input name="flowTimeoutMs" type="number" min="1000" placeholder="Flow Timeout (ms)" />
-            <input name="pingIntervalMs" type="number" min="1000" placeholder="Ping Interval (ms)" />
-            <input name="globalDataRefreshMs" type="number" min="10000" placeholder="Global Data Refresh (ms)" />
-            <input name="wanTestIntervalMs" type="number" min="1000" placeholder="WAN Test Interval (ms)" />
-            <label class="runtime-toggle-label">
-              <input name="localTotpEnabled" type="checkbox" />
-              Enable Local TOTP MFA
-            </label>
-            <button type="submit">Save Advanced Settings</button>
-          </form>
-          <div class="settings-actions runtime-factory-actions">
-            <button id="factoryResetBtn" type="button" class="meta-delete">Factory Reset for Deployment</button>
-          </div>
-          <p class="runtime-factory-hint">Wipes all sites, devices, users, tokens, logs, and saved settings back to deployment baseline. You will be signed out.</p>
-          <p id="runtimeConfigMsg"></p>
-        </div>
-      </section>
-      <section id="errorLogPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>11. Error Logs</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <label class="settings-inline-label">Lines
-              <input id="errorLogLimitInput" type="number" min="1" max="1000" value="250" />
-            </label>
-            <button id="refreshErrorLogBtn" type="button" class="ghost-btn">Refresh Error Logs</button>
-          </div>
-          <pre id="errorLogViewer" class="settings-log-viewer">No error logs loaded yet.</pre>
-          <p id="errorLogMsg"></p>
-        </div>
-      </section>
-      <section id="diagnosticsPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>12. Diagnostics Console</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <label class="settings-inline-label">Lines
-              <input id="diagnosticsLogLimitInput" type="number" min="1" max="2000" value="400" />
-            </label>
-            <label class="settings-inline-label">Protocol
-              <select id="diagnosticsProtocolFilter">
-                <option value="">All</option>
-                <option value="syslog">SYSLOG</option>
-                <option value="snmp">SNMP</option>
-                <option value="netflow">NETFLOW</option>
-              </select>
-            </label>
-            <label class="settings-inline-label">Level
-              <select id="diagnosticsLevelFilter">
-                <option value="">All</option>
-                <option value="info">INFO</option>
-                <option value="warn">WARN</option>
-                <option value="error">ERROR</option>
-                <option value="debug">DEBUG</option>
-              </select>
-            </label>
-            <label class="settings-inline-label">Site
-              <input id="diagnosticsSiteFilter" type="text" placeholder="site id/name" />
-            </label>
-            <button id="refreshDiagnosticsBtn" type="button" class="ghost-btn">Refresh Diagnostics</button>
-            <button id="openDiagnosticsConsoleBtn" type="button" class="ghost-btn">Pop Out Console</button>
-            <button id="clearDiagnosticsBtn" type="button" class="ghost-btn">Clear</button>
-          </div>
-          <pre id="diagnosticsLogViewer" class="settings-log-viewer">No diagnostics logs loaded yet.</pre>
-          <p id="diagnosticsLogMsg"></p>
-        </div>
-      </section>
-      <section id="rawTelemetryPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>13. Raw Telemetry Stream</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <label class="settings-inline-label">Lines
-              <input id="rawTelemetryLimitInput" type="number" min="1" max="5000" value="1000" />
-            </label>
-            <label class="settings-inline-label">Protocol
-              <select id="rawTelemetryProtocolFilter">
-                <option value="">All</option>
-                <option value="syslog">SYSLOG</option>
-                <option value="snmp">SNMP</option>
-                <option value="netflow">NETFLOW</option>
-              </select>
-            </label>
-            <label class="settings-inline-label">Site
-              <input id="rawTelemetrySiteFilter" type="text" placeholder="site id/name" />
-            </label>
-            <label class="settings-inline-label">Search
-              <input id="rawTelemetrySearchFilter" type="text" placeholder="message text" />
-            </label>
-            <label class="settings-inline-label">Auto
-              <input id="rawTelemetryAutoRefresh" type="checkbox" checked />
-            </label>
-            <button id="refreshRawTelemetryBtn" type="button" class="ghost-btn">Refresh Stream</button>
-            <button id="openRawTelemetryConsoleBtn" type="button" class="ghost-btn">Pop Out Stream</button>
-            <button id="clearRawTelemetryBtn" type="button" class="ghost-btn">Clear</button>
-          </div>
-          <pre id="rawTelemetryViewer" class="settings-log-viewer">No raw telemetry loaded yet.</pre>
-          <p id="rawTelemetryMsg"></p>
-        </div>
-      </section>
-      <section id="firewallCheckerPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>14. Local Firewall Checker</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <button id="refreshFirewallCheckerBtn" type="button" class="ghost-btn">Run Firewall Check</button>
-          </div>
-          <pre id="firewallCheckerViewer" class="settings-log-viewer">No firewall check run yet.</pre>
-          <p id="firewallCheckerMsg"></p>
-        </div>
-      </section>
-      <section id="storagePanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>15. Storage</span></button>
-        <div class="settings-content">
-          <div class="settings-actions">
-            <button id="refreshStorageBtn" type="button" class="ghost-btn">Refresh Storage</button>
-            <button id="purgeStorageLogsBtn" type="button" class="ghost-btn">Purge Logs</button>
-          </div>
-          <div id="storageSummaryContent" class="system-health-grid"></div>
-          <pre id="storageViewer" class="settings-log-viewer">No storage summary loaded yet.</pre>
-          <p id="storageMsg"></p>
-        </div>
-      </section>
-      <section id="apiAccessPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>16. API</span></button>
-        <div class="settings-content">
-          <form id="apiTokenForm" class="settings-compact-form api-token-form">
-            <label>Name
-              <input id="apiTokenNameInput" type="text" name="name" maxlength="80" placeholder="Automation token" />
-            </label>
-            <label>Role
-              <select id="apiTokenRoleInput" name="role">
+        </section>
+      </div>
+
+      <!-- ═══ SECURITY TAB ═══ -->
+      <div class="settings-tab-content" data-settings-tab="security">
+        <section id="userAdminPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>User Management</span></button>
+          <div class="settings-content">
+            <div id="userList" class="user-list"></div>
+            <form id="addUserForm" class="add-user-form">
+              <input name="email" type="text" placeholder="username or user@example.com" required />
+              <input name="displayName" type="text" placeholder="Display Name (optional)" />
+              <select name="role">
                 <option value="monitor">Monitor</option>
                 <option value="admin">Admin</option>
               </select>
-            </label>
-            <label>Expires At (optional)
-              <input id="apiTokenExpiresInput" type="datetime-local" name="expiresAt" />
-            </label>
-            <button id="apiTokenCreateBtn" type="submit">Create Token</button>
-          </form>
-          <p class="webhook-routing-help">Use header: <code>Authorization: Bearer &lt;token&gt;</code></p>
-          <div id="apiTokenReveal" class="api-token-reveal" hidden>
-            <p class="api-token-reveal-title">Copy now. This token is shown once.</p>
-            <code id="apiTokenRevealValue" class="api-token-reveal-value"></code>
-            <div class="settings-actions">
-              <button id="apiTokenCopyBtn" type="button" class="ghost-btn">Copy Token</button>
-            </div>
-          </div>
-          <div id="apiTokenList" class="api-token-list">
-            <p class="empty">No API tokens yet.</p>
-          </div>
-          <div class="settings-subblock">
-            <h4>Windows Agent .exe Package</h4>
-            <form id="windowsAgentPackageForm" class="settings-compact-form api-token-form">
-              <label>Executable
-                <input id="windowsAgentPackageFile" type="file" accept=".exe,application/octet-stream" />
-              </label>
-              <button id="windowsAgentPackageUploadBtn" type="submit">Upload .exe</button>
-              <button id="windowsAgentPackageDeleteBtn" type="button" class="ghost-btn">Remove Upload</button>
+              <button type="submit">Add User</button>
             </form>
-            <p class="webhook-routing-help">Used by Windows collector enrollment when requesting <code>/api/agent/windows/download?format=exe</code>.</p>
-            <p id="windowsAgentPackageMsg"></p>
+            <p id="userAdminMsg"></p>
           </div>
-          <p id="apiTokenMsg"></p>
-        </div>
-      </section>
-      <section id="mySecurityPanel" class="settings-subpanel settings-section is-collapsed" hidden>
-        <button type="button" class="settings-toggle"><span>My Security</span></button>
-        <div class="settings-content">
-          <p>Reset your own TOTP enrollment. You will re-enroll at next local login.</p>
-          <div class="settings-actions">
-            <button id="resetOwnTotpBtn" type="button">Reset My TOTP</button>
+        </section>
+        <section id="ssoConfigPanel" class="sso-config-panel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>SSO Configuration</span></button>
+          <div class="settings-content">
+            <p id="ssoStatusLine">SSO: Not configured</p>
+            <p id="systemDepsLine" class="system-deps-line">System CLI Dependency: Checking...</p>
+            <div class="settings-actions">
+              <button id="ssoLoginBtn" type="button">Login with Entra</button>
+              <button id="syncNowBtn" type="button" class="ghost-btn">Sync Now</button>
+            </div>
+            <form id="ssoConfigForm" class="sso-config-form">
+              <input name="tenantId" placeholder="Tenant ID" />
+              <input name="clientId" placeholder="Client ID" />
+              <input name="clientSecret" type="password" placeholder="Client Secret" />
+              <input name="redirectUri" placeholder="Redirect URI" />
+              <input name="scope" placeholder="Scope (openid profile email)" />
+              <button type="submit">Save SSO Config</button>
+            </form>
+            <p id="ssoConfigMsg"></p>
           </div>
-          <p id="mySecurityMsg"></p>
-        </div>
-      </section>
+        </section>
+        <section id="sslConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>SSL Certificate</span></button>
+          <div class="settings-content">
+            <form id="sslConfigForm" class="settings-compact-form">
+              <textarea name="certPem" rows="4" placeholder="Certificate PEM"></textarea>
+              <textarea name="keyPem" rows="4" placeholder="Private Key PEM"></textarea>
+              <textarea name="caPem" rows="4" placeholder="CA Chain PEM (optional)"></textarea>
+              <button type="submit">Save SSL Config</button>
+            </form>
+            <p id="sslConfigMsg"></p>
+          </div>
+        </section>
+        <section id="apiAccessPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>API Tokens</span></button>
+          <div class="settings-content">
+            <form id="apiTokenForm" class="settings-compact-form api-token-form">
+              <label>Name
+                <input id="apiTokenNameInput" type="text" name="name" maxlength="80" placeholder="Automation token" />
+              </label>
+              <label>Role
+                <select id="apiTokenRoleInput" name="role">
+                  <option value="monitor">Monitor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <label>Expires At (optional)
+                <input id="apiTokenExpiresInput" type="datetime-local" name="expiresAt" />
+              </label>
+              <button id="apiTokenCreateBtn" type="submit">Create Token</button>
+            </form>
+            <p class="webhook-routing-help">Use header: <code>Authorization: Bearer &lt;token&gt;</code></p>
+            <div id="apiTokenReveal" class="api-token-reveal" hidden>
+              <p class="api-token-reveal-title">Copy now. This token is shown once.</p>
+              <code id="apiTokenRevealValue" class="api-token-reveal-value"></code>
+              <div class="settings-actions">
+                <button id="apiTokenCopyBtn" type="button" class="ghost-btn">Copy Token</button>
+              </div>
+            </div>
+            <div id="apiTokenList" class="api-token-list">
+              <p class="empty">No API tokens yet.</p>
+            </div>
+            <div class="settings-subblock">
+              <h4>Windows Agent .exe Package</h4>
+              <form id="windowsAgentPackageForm" class="settings-compact-form api-token-form">
+                <label>Executable
+                  <input id="windowsAgentPackageFile" type="file" accept=".exe,application/octet-stream" />
+                </label>
+                <button id="windowsAgentPackageUploadBtn" type="submit">Upload .exe</button>
+                <button id="windowsAgentPackageDeleteBtn" type="button" class="ghost-btn">Remove Upload</button>
+              </form>
+              <p class="webhook-routing-help">Used by Windows collector enrollment when requesting <code>/api/agent/windows/download?format=exe</code>.</p>
+              <p id="windowsAgentPackageMsg"></p>
+            </div>
+            <p id="apiTokenMsg"></p>
+          </div>
+        </section>
+        <section id="mySecurityPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>My Security</span></button>
+          <div class="settings-content">
+            <p>Reset your own TOTP enrollment. You will re-enroll at next local login.</p>
+            <div class="settings-actions">
+              <button id="resetOwnTotpBtn" type="button">Reset My TOTP</button>
+            </div>
+            <p id="mySecurityMsg"></p>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══ NOTIFICATIONS TAB ═══ -->
+      <div class="settings-tab-content" data-settings-tab="notifications">
+        <section id="teamsConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Teams Notifications</span></button>
+          <div class="settings-content">
+            <form id="teamsConfigForm" class="settings-compact-form">
+              <label>Teams Webhook URL
+                <input name="teamsWebhookUrl" type="url" placeholder="https://outlook.office.com/webhook/..." />
+              </label>
+              <label>Webhook Timeout (ms)
+                <input name="teamsWebhookTimeoutMs" type="number" min="1000" max="120000" placeholder="8000" />
+              </label>
+              <label>Payload Title
+                <input id="teamsPayloadTitle" type="text" placeholder="[CAJAL TEST] Power Automate webhook" />
+              </label>
+              <label>Payload Group
+                <input id="teamsPayloadGroup" name="teamsPayloadGroup" type="text" placeholder="cajal" />
+              </label>
+              <label>Payload Message
+                <textarea id="teamsPayloadMessage" rows="3" placeholder="This is a test webhook payload from CAJAL."></textarea>
+              </label>
+              <div class="settings-actions">
+                <button type="submit">Save Teams Settings</button>
+                <button id="teamsConfigTestBtn" type="button" class="ghost-btn">Send Webhook Test</button>
+              </div>
+            </form>
+            <p id="teamsConfigMsg"></p>
+          </div>
+        </section>
+        <section id="webhookRoutingPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Webhook Routing</span></button>
+          <div class="settings-content">
+            <p class="webhook-routing-help">Template tokens: <code>{{status}}</code> <code>{{previousStatus}}</code> <code>{{siteName}}</code> <code>{{siteRole}}</code> <code>{{locationName}}</code> <code>{{reason}}</code> <code>{{detail}}</code> <code>{{routeId}}</code> <code>{{routeLabel}}</code> <code>{{section}}</code> <code>{{signal}}</code> <code>{{timestamp}}</code> <code>{{wanIp1}}</code> <code>{{wanIp2}}</code> <code>{{agentHost}}</code> <code>{{agentLocalIp}}</code> <code>{{agentRemoteIp}}</code> <code>{{serviceLabel}}</code> <code>{{serviceTarget}}</code></p>
+            <div id="webhookRoutingContent" class="webhook-routing-grid"></div>
+            <p id="webhookRoutingMsg"></p>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══ SYSTEM TAB ═══ -->
+      <div class="settings-tab-content" data-settings-tab="system">
+        <section id="systemHealthPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>System Health</span></button>
+          <div class="settings-content">
+            <div class="settings-actions">
+              <button id="refreshSystemHealthBtn" type="button" class="ghost-btn">Refresh Health</button>
+            </div>
+            <div id="versionCheckSection" class="version-check-section"></div>
+            <div id="systemHealthContent" class="system-health-grid"></div>
+            <p id="systemHealthMsg"></p>
+          </div>
+        </section>
+        <section id="firewallCheckerPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Local Firewall Checker</span></button>
+          <div class="settings-content">
+            <div class="settings-actions">
+              <button id="refreshFirewallCheckerBtn" type="button" class="ghost-btn">Run Firewall Check</button>
+            </div>
+            <pre id="firewallCheckerViewer" class="settings-log-viewer">No firewall check run yet.</pre>
+            <p id="firewallCheckerMsg"></p>
+          </div>
+        </section>
+        <section id="runtimeConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Advanced Options</span></button>
+          <div class="settings-content">
+            <form id="runtimeConfigForm" class="settings-compact-form settings-ports-form">
+              <input name="syslogUdpPort" type="number" min="1" max="65535" placeholder="Syslog UDP Port" />
+              <input name="syslogTcpPort" type="number" min="1" max="65535" placeholder="Syslog TCP Port" />
+              <input name="netflowPort" type="number" min="1" max="65535" placeholder="NetFlow Port" />
+              <input name="snmpPollIntervalMs" type="number" min="1000" placeholder="SNMP Poll Interval (ms)" />
+              <input name="flowTimeoutMs" type="number" min="1000" placeholder="Flow Timeout (ms)" />
+              <input name="pingIntervalMs" type="number" min="1000" placeholder="Ping Interval (ms)" />
+              <input name="globalDataRefreshMs" type="number" min="10000" placeholder="Global Data Refresh (ms)" />
+              <input name="wanTestIntervalMs" type="number" min="1000" placeholder="WAN Test Interval (ms)" />
+              <label class="runtime-toggle-label">
+                <input name="localTotpEnabled" type="checkbox" />
+                Enable Local TOTP MFA
+              </label>
+              <button type="submit">Save Advanced Settings</button>
+            </form>
+            <div class="settings-actions runtime-factory-actions">
+              <button id="factoryResetBtn" type="button" class="meta-delete">Factory Reset for Deployment</button>
+            </div>
+            <p class="runtime-factory-hint">Wipes all sites, devices, users, tokens, logs, and saved settings back to deployment baseline. You will be signed out.</p>
+            <p id="runtimeConfigMsg"></p>
+          </div>
+        </section>
+        <section id="errorLogPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Error Logs</span></button>
+          <div class="settings-content">
+            <div class="settings-actions">
+              <label class="settings-inline-label">Lines
+                <input id="errorLogLimitInput" type="number" min="1" max="1000" value="250" />
+              </label>
+              <button id="refreshErrorLogBtn" type="button" class="ghost-btn">Refresh Error Logs</button>
+            </div>
+            <pre id="errorLogViewer" class="settings-log-viewer">No error logs loaded yet.</pre>
+            <p id="errorLogMsg"></p>
+          </div>
+        </section>
+        <section id="diagnosticsPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Diagnostics Console</span></button>
+          <div class="settings-content">
+            <div class="settings-actions">
+              <label class="settings-inline-label">Lines
+                <input id="diagnosticsLogLimitInput" type="number" min="1" max="2000" value="400" />
+              </label>
+              <label class="settings-inline-label">Protocol
+                <select id="diagnosticsProtocolFilter">
+                  <option value="">All</option>
+                  <option value="syslog">SYSLOG</option>
+                  <option value="snmp">SNMP</option>
+                  <option value="netflow">NETFLOW</option>
+                </select>
+              </label>
+              <label class="settings-inline-label">Level
+                <select id="diagnosticsLevelFilter">
+                  <option value="">All</option>
+                  <option value="info">INFO</option>
+                  <option value="warn">WARN</option>
+                  <option value="error">ERROR</option>
+                  <option value="debug">DEBUG</option>
+                </select>
+              </label>
+              <label class="settings-inline-label">Site
+                <input id="diagnosticsSiteFilter" type="text" placeholder="site id/name" />
+              </label>
+              <button id="refreshDiagnosticsBtn" type="button" class="ghost-btn">Refresh Diagnostics</button>
+              <button id="openDiagnosticsConsoleBtn" type="button" class="ghost-btn">Pop Out Console</button>
+              <button id="clearDiagnosticsBtn" type="button" class="ghost-btn">Clear</button>
+            </div>
+            <pre id="diagnosticsLogViewer" class="settings-log-viewer">No diagnostics logs loaded yet.</pre>
+            <p id="diagnosticsLogMsg"></p>
+          </div>
+        </section>
+        <section id="rawTelemetryPanel" class="settings-subpanel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>Raw Telemetry Stream</span></button>
+          <div class="settings-content">
+            <div class="settings-actions">
+              <label class="settings-inline-label">Lines
+                <input id="rawTelemetryLimitInput" type="number" min="1" max="5000" value="1000" />
+              </label>
+              <label class="settings-inline-label">Protocol
+                <select id="rawTelemetryProtocolFilter">
+                  <option value="">All</option>
+                  <option value="syslog">SYSLOG</option>
+                  <option value="snmp">SNMP</option>
+                  <option value="netflow">NETFLOW</option>
+                </select>
+              </label>
+              <label class="settings-inline-label">Site
+                <input id="rawTelemetrySiteFilter" type="text" placeholder="site id/name" />
+              </label>
+              <label class="settings-inline-label">Search
+                <input id="rawTelemetrySearchFilter" type="text" placeholder="message text" />
+              </label>
+              <label class="settings-inline-label">Auto
+                <input id="rawTelemetryAutoRefresh" type="checkbox" checked />
+              </label>
+              <button id="refreshRawTelemetryBtn" type="button" class="ghost-btn">Refresh Stream</button>
+              <button id="openRawTelemetryConsoleBtn" type="button" class="ghost-btn">Pop Out Stream</button>
+              <button id="clearRawTelemetryBtn" type="button" class="ghost-btn">Clear</button>
+            </div>
+            <pre id="rawTelemetryViewer" class="settings-log-viewer">No raw telemetry loaded yet.</pre>
+            <p id="rawTelemetryMsg"></p>
+          </div>
+        </section>
+      </div>
+
     </section>
     <main class="layout">
       <section class="panel company-name-panel">

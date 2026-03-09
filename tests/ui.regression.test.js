@@ -29,7 +29,7 @@ test('help doc includes stable patch-notes anchor', () => {
 test('settings include dedicated API section with token controls', () => {
   const html = readFile('public/index.html');
   assert.match(html, /id="apiAccessPanel"/);
-  assert.match(html, /<span>16\. API<\/span>/);
+  assert.match(html, /<span>API Tokens<\/span>/);
   assert.match(html, /id="apiTokenForm"/);
   assert.match(html, /id="apiTokenList"/);
 });
@@ -278,7 +278,7 @@ test('SNMP poller uses recursive setTimeout for backpressure (not setInterval)',
   const monitoring = readFile('lib/monitoring.js');
   const fnIdx = monitoring.indexOf('function startSnmpPoller');
   assert.ok(fnIdx > 0, 'startSnmpPoller function must exist');
-  const snmpSection = monitoring.slice(fnIdx, fnIdx + 6000);
+  const snmpSection = monitoring.slice(fnIdx, fnIdx + 8000);
   assert.ok(!snmpSection.includes('setInterval'), 'SNMP poller must not use setInterval (use setTimeout for backpressure)');
   assert.match(snmpSection, /setTimeout/, 'SNMP poller must use setTimeout for backpressure');
 });
@@ -584,4 +584,83 @@ test('.env.example documents DATABASE_SSL auto-detection', () => {
   const envExample = readFile('.env.example');
   assert.ok(envExample.includes('CAJAL_DATABASE_SSL'), 'must document CAJAL_DATABASE_SSL');
   assert.ok(envExample.includes('Auto-detect') || envExample.includes('auto-detect'), 'must mention auto-detection');
+});
+
+// ── v1.6.1 regression tests ──────────────────────────────────────────────────
+
+test('fresh install seeds empty sites and devices (no demo data)', () => {
+  const serverSrc = readFile('server.js');
+  assert.match(serverSrc, /defaultData\s*=\s*\{/, 'defaultData must exist');
+  assert.match(serverSrc, /sites:\s*\[\]/, 'defaultData.sites must be empty array');
+  assert.match(serverSrc, /devices:\s*\[\]/, 'defaultData.devices must be empty array');
+  assert.ok(!serverSrc.includes('siteFromSeed'), 'siteFromSeed should not be imported (no seed data)');
+});
+
+test('TOTP issuer uses organization name from locationSettings', () => {
+  const authSrc = readFile('lib/auth.js');
+  const authRoutesSrc = readFile('lib/routes/auth.js');
+  assert.ok(authSrc.includes('locationSettings') && authSrc.includes('companyName'), 'makeTotpPayload must read org name from locationSettings');
+  assert.ok(authRoutesSrc.includes('locationSettings') && authRoutesSrc.includes('companyName'), 'QR route must read org name from locationSettings');
+});
+
+test('Teams notify section is removed from site cards', () => {
+  const appSrc = readFile('public/app.js');
+  assert.ok(!appSrc.includes('Teams Notes'), 'Teams Notes label must not appear in card templates');
+  assert.ok(!appSrc.includes('notify-readonly'), 'notify-readonly paragraph must not appear');
+  assert.ok(!appSrc.includes("Teams ${notifications.enabled"), 'Teams ON/OFF toggle buttons must not appear in templates');
+});
+
+test('LAN Link Monitor card exists in app.js', () => {
+  const appSrc = readFile('public/app.js');
+  assert.ok(appSrc.includes('lanLinkMonitorCard'), 'lanLinkMonitorCard function must exist');
+  assert.ok(appSrc.includes('LAN LINK MONITOR'), 'card must have LAN LINK MONITOR heading');
+  assert.ok(appSrc.includes('lan-link-card'), 'card must use lan-link-card CSS class');
+  assert.ok(appSrc.includes('lan-link-table'), 'card must contain a table');
+});
+
+test('LAN Link Monitor card has double-width CSS', () => {
+  const cssSrc = readFile('public/styles.css');
+  assert.ok(cssSrc.includes('.lan-link-card'), 'lan-link-card class must exist');
+  assert.ok(cssSrc.includes('grid-column: span 2'), 'lan-link-card must span 2 columns');
+});
+
+test('index.html blocks rendering until auth check completes', () => {
+  const indexSrc = readFile('public/index.html');
+  assert.ok(indexSrc.includes('XMLHttpRequest'), 'must use synchronous XHR for auth guard');
+  assert.ok(indexSrc.includes("xhr.open('GET', '/api/auth/me', false)"), 'XHR must be synchronous (3rd arg false)');
+  assert.ok(indexSrc.includes("window.location.replace('/login.html')"), 'must redirect to login.html if unauthenticated');
+});
+
+test('welcome dialog and setup wizard are disabled', () => {
+  const appSrc = readFile('public/app.js');
+  const welcomeFn = appSrc.match(/function maybeShowWelcomeDialog[\s\S]*?\n\}/);
+  assert.ok(welcomeFn, 'maybeShowWelcomeDialog must exist');
+  assert.ok(!welcomeFn[0].includes('showModal'), 'welcome dialog must not call showModal');
+  const wizardFn = appSrc.match(/function maybeShowSetupWizard[\s\S]*?\n\}/);
+  assert.ok(wizardFn, 'maybeShowSetupWizard must exist');
+  assert.ok(!wizardFn[0].includes('showModal'), 'setup wizard must not call showModal');
+});
+
+test('SNMP interface metrics structure includes interface fields', () => {
+  const sitesSrc = readFile('lib/sites.js');
+  assert.ok(sitesSrc.includes('interfaces: []'), 'snmp metrics must include interfaces array');
+  assert.ok(sitesSrc.includes('interfaceCount:'), 'snmp metrics must include interfaceCount');
+  assert.ok(sitesSrc.includes('lastInterfacePoll:'), 'snmp metrics must include lastInterfacePoll');
+});
+
+test('SNMP poller calls runSnmpWalk for interface table after successful uptime poll', () => {
+  const monSrc = readFile('lib/monitoring.js');
+  const pollerIdx = monSrc.indexOf('function startSnmpPoller');
+  assert.ok(pollerIdx > 0, 'startSnmpPoller must exist');
+  const pollerBlock = monSrc.slice(pollerIdx, pollerIdx + 8000);
+  assert.ok(pollerBlock.includes('runSnmpWalk'), 'poller must call runSnmpWalk');
+  assert.ok(pollerBlock.includes('parseIfTableWalk'), 'poller must call parseIfTableWalk');
+  assert.ok(pollerBlock.includes('computeInterfaceDeltas'), 'poller must compute deltas');
+  assert.ok(pollerBlock.includes('_ifTableSnapshots'), 'poller must track snapshots for delta calculation');
+});
+
+test('login page has First-Time Setup link', () => {
+  const loginHtml = readFile('public/login.html');
+  assert.ok(loginHtml.includes('registerBtn'), 'login page must have registerBtn element');
+  assert.ok(loginHtml.includes('First-Time Setup'), 'login page must show First-Time Setup text');
 });

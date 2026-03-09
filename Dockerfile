@@ -22,5 +22,8 @@ COPY . .
 
 EXPOSE 4000 5514/tcp 5514/udp 2055/udp
 
+RUN chown -R node:node /app
+USER node
+
 CMD ["npm", "start"]
 

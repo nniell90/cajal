@@ -980,8 +980,8 @@ test('decryptBackupPayload throws on malformed backup blob', () => {
   assert.throws(() => core.decryptBackupPayload({ format: 'unknown' }, 'password'), /invalid backup file format/i);
 });
 
-test('encryptBackupPayload rejects passwords shorter than 12 chars', () => {
-  assert.throws(() => core.encryptBackupPayload({}, 'short'), /at least 12/i);
+test('encryptBackupPayload rejects passwords shorter than 16 chars', () => {
+  assert.throws(() => core.encryptBackupPayload({}, 'short'), /at least 16/i);
 });
 
 // ── validateBackupImportPayload ────────────────────────────────────────────────

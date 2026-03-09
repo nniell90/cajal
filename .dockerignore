@@ -6,6 +6,7 @@ data/*.log
 .git
 .gitignore
 .claude
+.github/
 tests
 docs
 docker-reload.sh

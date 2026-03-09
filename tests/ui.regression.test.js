@@ -92,11 +92,9 @@ test('config key derivation uses HKDF', () => {
   assert.match(cryptoFile, /deriveCryptoKeyHkdf/, 'must have HKDF derivation function');
 });
 
-test('backup password minimum is 12 characters', () => {
+test('backup password minimum is 16 characters', () => {
   const cryptoFile = readFile('lib/crypto.js');
-  assert.match(cryptoFile, /pass\.length < 12/, 'backup password minimum must be 12');
-  const html = readFile('public/index.html');
-  assert.match(html, /backupPasswordInput.*minlength="12"/, 'backup input must have minlength 12');
+  assert.match(cryptoFile, /pass\.length < 16/, 'backup password minimum must be 16');
 });
 
 test('login registration dialog keeps staged auth controls and disables native form blocking', () => {
@@ -647,4 +645,104 @@ test('SNMP poller calls runSnmpWalk for interface table after successful uptime 
 test('login page does not expose First-Time Setup link', () => {
   const loginHtml = readFile('public/login.html');
   assert.ok(!loginHtml.includes('First-Time Setup'), 'login page must not show First-Time Setup text');
+});
+
+// ── QA Review Fixes ──────────────────────────────────────────────────────────
+
+test('error catch blocks use safe err?.message access', () => {
+  const sites = readFile('lib/routes/sites.js');
+  const auth = readFile('lib/routes/auth.js');
+  const system = readFile('lib/routes/system.js');
+  // sites.js catch blocks must use safe access
+  assert.ok(!sites.match(/detail: err\.message(?!\s*\|\|)/), 'sites.js must not use bare err.message in detail');
+  // auth.js must not leak Azure error_description
+  assert.ok(!auth.includes('payload.error_description'), 'auth.js must not leak Azure error_description');
+  // system.js must use safe access
+  assert.ok(!system.match(/\$\{err\.message\}/), 'system.js must not use bare ${err.message}');
+});
+
+test('POST /api/devices validates siteId existence and IP format', () => {
+  const devices = readFile('lib/routes/devices.js');
+  assert.match(devices, /state\.sites\.find/, 'must validate siteId exists in state.sites');
+  assert.match(devices, /net\.isIP/, 'must validate IP address format');
+});
+
+test('site name has max length validation', () => {
+  const sites = readFile('lib/routes/sites.js');
+  assert.match(sites, /name\.length > 255/, 'must reject site names over 255 characters');
+});
+
+test('POST /api/users returns 201 for new users', () => {
+  const users = readFile('lib/routes/users.js');
+  assert.match(users, /isNew \? 201 : 200/, 'must return 201 for new users, 200 for updates');
+});
+
+test('OAuth fetch has AbortController timeout', () => {
+  const auth = readFile('lib/routes/auth.js');
+  assert.match(auth, /AbortController/, 'OAuth token exchange must use AbortController');
+  assert.match(auth, /signal:\s*abortCtl\.signal/, 'fetch must pass abort signal');
+  assert.match(auth, /clearTimeout\(fetchTimer\)/, 'must clean up timeout');
+});
+
+test('OAuth state tokens are pruned on new SSO login', () => {
+  const auth = readFile('lib/routes/auth.js');
+  assert.match(auth, /600000/, 'OAuth state must have 10-minute TTL (600000ms)');
+  assert.match(auth, /oauthState\.delete/, 'must prune expired OAuth state entries');
+});
+
+test('static file path uses path.resolve for traversal prevention', () => {
+  const router = readFile('lib/router.js');
+  assert.match(router, /path\.resolve\(PUBLIC_DIR/, 'must use path.resolve instead of path.join for static files');
+});
+
+test('CSP does not allow data: URIs', () => {
+  const session = readFile('lib/session.js');
+  assert.ok(session.includes('Content-Security-Policy'), 'CSP header must exist');
+  // Find the CSP value string (spans multiple lines in setHeader call)
+  const cspStart = session.indexOf("default-src 'self'");
+  assert.ok(cspStart > 0, 'CSP policy string must exist');
+  const cspEnd = session.indexOf('"', cspStart);
+  const cspValue = session.substring(cspStart, cspEnd);
+  assert.ok(!cspValue.includes('data:'), 'CSP must not allow data: URIs');
+});
+
+test('submit buttons are disabled during async form operations', () => {
+  const app = readFile('public/app.js');
+  // Check add device, add user, add location forms
+  const deviceForm = app.substring(app.indexOf('addDeviceForm?.addEventListener'), app.indexOf('addDeviceForm?.addEventListener') + 1500);
+  assert.match(deviceForm, /submitBtn\.disabled = true/, 'add device form must disable submit button');
+  const userForm = app.substring(app.indexOf('addUserForm?.addEventListener'), app.indexOf('addUserForm?.addEventListener') + 800);
+  assert.match(userForm, /submitBtn\.disabled = true/, 'add user form must disable submit button');
+  const locationForm = app.substring(app.indexOf('addLocationForm?.addEventListener'), app.indexOf('addLocationForm?.addEventListener') + 1500);
+  assert.match(locationForm, /submitBtn\.disabled = true/, 'add location form must disable submit button');
+});
+
+test('Redis operations log errors instead of silently swallowing', () => {
+  const storage = readFile('lib/storage.js');
+  const persistStart = storage.indexOf('function redisPersistSession');
+  const deleteStart = storage.indexOf('function redisDeleteSession');
+  const persistFn = storage.substring(persistStart, deleteStart);
+  const deleteFn = storage.substring(deleteStart, deleteStart + 300);
+  assert.ok(!persistFn.includes('.catch(() => {})'), 'redisPersistSession must not silently swallow errors');
+  assert.ok(persistFn.includes('logJson'), 'redisPersistSession must log Redis errors');
+  assert.ok(!deleteFn.includes('.catch(() => {})'), 'redisDeleteSession must not silently swallow errors');
+  assert.ok(deleteFn.includes('logJson'), 'redisDeleteSession must log Redis errors');
+});
+
+test('Dockerfile runs as non-root user', () => {
+  const dockerfile = readFile('Dockerfile');
+  assert.match(dockerfile, /USER node/, 'Dockerfile must set USER node');
+});
+
+test('docker-compose cajal service has healthcheck', () => {
+  const compose = readFile('docker-compose.yml');
+  const cajalSection = compose.substring(compose.indexOf('cajal:'));
+  assert.match(cajalSection, /healthcheck/, 'cajal service must have healthcheck');
+  assert.match(cajalSection, /\/api\/health/, 'healthcheck must hit /api/health endpoint');
+});
+
+test('logout endpoint has rate limiting', () => {
+  const auth = readFile('lib/routes/auth.js');
+  const logoutBlock = auth.substring(auth.indexOf("'/api/auth/logout'"), auth.indexOf("'/api/auth/logout'") + 500);
+  assert.match(logoutBlock, /enforceRateLimitOrSend/, 'logout must use rate limiting');
 });

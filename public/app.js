@@ -5612,6 +5612,8 @@ addUserForm?.addEventListener('submit', async (event) => {
   if (!canAdmin()) return;
   const payload = Object.fromEntries(new FormData(addUserForm).entries());
   if (userAdminMsg) userAdminMsg.textContent = 'Adding user...';
+  const submitBtn = addUserForm.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   try {
     await getJson('/api/users', {
       method: 'POST',
@@ -5623,6 +5625,8 @@ addUserForm?.addEventListener('submit', async (event) => {
     await loadManagedUsers();
   } catch (err) {
     if (userAdminMsg) userAdminMsg.textContent = err.message;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 });
 
@@ -7395,6 +7399,8 @@ addDeviceForm?.addEventListener('submit', async (event) => {
   const role = isLanLinks ? 'other' : normalizeRole(rawType);
   const category = String(pendingAddDeviceCategory || '').trim().toLowerCase();
   if (!name || !category) return;
+  const submitBtn = addDeviceForm.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   try {
     const created = await getJson('/api/sites', {
       method: 'POST',
@@ -7422,6 +7428,8 @@ addDeviceForm?.addEventListener('submit', async (event) => {
     await loadDashboard();
   } catch (err) {
     if (addDeviceMsg) addDeviceMsg.textContent = err.message;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 });
 
@@ -7484,6 +7492,8 @@ addLocationForm?.addEventListener('submit', async (event) => {
   );
   const name = String(addLocationName?.value || '').trim();
   if (!name) return;
+  const submitBtn = addLocationForm.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   setNotice('Adding location...');
   try {
     locationSettingsState = normalizeLocationSettings(await getJson('/api/settings/locations/sections', {
@@ -7515,6 +7525,8 @@ addLocationForm?.addEventListener('submit', async (event) => {
     renderTiles();
   } catch (err) {
     setNotice(err.message);
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 });
 

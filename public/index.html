@@ -78,7 +78,7 @@
           <div class="settings-content">
             <form id="clockConfigForm" class="settings-compact-form">
               <label>Time Zone
-                <input name="globalClockTimeZone" placeholder="IANA, e.g. America/Chicago" />
+                <select name="globalClockTimeZone"></select>
               </label>
               <label>Display Format
                 <select name="globalClockHourMode">
@@ -465,9 +465,11 @@
         <ul class="roadmap-list">
           <li>SWITCH &amp; AP card</li>
           <li>LDAP Integration</li>
+          <li>Settings UI update</li>
           <li>Better use of white space</li>
         </ul>
         <div class="local-auth-actions">
+          <button id="honkBtn" type="button" class="ghost-btn honk-btn">HONK</button>
           <button id="roadmapClose" type="button" class="ghost-btn">Close</button>
         </div>
       </form>

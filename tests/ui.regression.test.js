@@ -574,19 +574,20 @@ test('.env.example documents DATABASE_SSL auto-detection', () => {
 
 // ── v1.6.1 regression tests ──────────────────────────────────────────────────
 
-test('fresh install seeds empty sites and devices (no demo data)', () => {
+test('fresh install seeds demo sites and empty devices', () => {
   const serverSrc = readFile('server.js');
   assert.match(serverSrc, /defaultData\s*=\s*\{/, 'defaultData must exist');
-  assert.match(serverSrc, /sites:\s*\[\]/, 'defaultData.sites must be empty array');
+  assert.ok(serverSrc.includes("'site-hq'") || serverSrc.includes('"site-hq"'), 'defaultData must include Demo Firewall site');
+  assert.ok(serverSrc.includes('Demo Collector'), 'defaultData must include Demo Collector site');
+  assert.ok(serverSrc.includes('Demo LAN Links'), 'defaultData must include Demo LAN Links site');
   assert.match(serverSrc, /devices:\s*\[\]/, 'defaultData.devices must be empty array');
-  assert.ok(!serverSrc.includes('siteFromSeed'), 'siteFromSeed should not be imported (no seed data)');
 });
 
-test('TOTP issuer uses organization name from locationSettings', () => {
+test('TOTP issuer is hardcoded to Cajal ICBM', () => {
   const authSrc = readFile('lib/auth.js');
   const authRoutesSrc = readFile('lib/routes/auth.js');
-  assert.ok(authSrc.includes('locationSettings') && authSrc.includes('companyName'), 'makeTotpPayload must read org name from locationSettings');
-  assert.ok(authRoutesSrc.includes('locationSettings') && authRoutesSrc.includes('companyName'), 'QR route must read org name from locationSettings');
+  assert.ok(authSrc.includes("const issuer = 'Cajal ICBM'"), 'makeTotpPayload must use Cajal ICBM issuer');
+  assert.ok(authRoutesSrc.includes("const issuer = 'Cajal ICBM'"), 'QR route must use Cajal ICBM issuer');
 });
 
 test('Teams notify section is removed from site cards', () => {
@@ -743,4 +744,37 @@ test('logout endpoint has rate limiting', () => {
   const auth = readFile('lib/routes/auth.js');
   const logoutBlock = auth.substring(auth.indexOf("'/api/auth/logout'"), auth.indexOf("'/api/auth/logout'") + 500);
   assert.match(logoutBlock, /enforceRateLimitOrSend/, 'logout must use rate limiting');
+});
+
+test('FW CHECK badge shows N/A when no firewall checks exist', () => {
+  const appSrc = readFile('public/app.js');
+  assert.ok(appSrc.includes("firewallValue = 'N/A'"), 'must set firewallValue to N/A when payload exists but no checks');
+  assert.ok(appSrc.includes("firewallTone = 'up'"), 'must set firewallTone to up when no checks');
+  assert.ok(appSrc.includes('firewallPayload && typeof firewallPayload'), 'must check firewallPayload exists before showing N/A');
+});
+
+test('LAN Link Monitor card has EDIT button', () => {
+  const appSrc = readFile('public/app.js');
+  assert.ok(appSrc.includes('lan-link-edit-btn'), 'must render edit button with lan-link-edit-btn class');
+  assert.ok(appSrc.includes('activeLanLinkEditorSiteId'), 'must track active LAN link editor state');
+  assert.ok(appSrc.includes('lan-link-name-form'), 'must render inline name edit form');
+});
+
+test('LAN Link EDIT button has CSS styling', () => {
+  const cssSrc = readFile('public/styles.css');
+  assert.ok(cssSrc.includes('.lan-link-edit-btn'), 'lan-link-edit-btn class must exist in CSS');
+  assert.ok(cssSrc.includes('.lan-link-name-form'), 'lan-link-name-form class must exist in CSS');
+});
+
+test('ticker animation uses tuned speed (94s)', () => {
+  const cssSrc = readFile('public/styles.css');
+  assert.ok(cssSrc.includes('ticker-scroll 94s linear infinite'), 'ticker must use 94s animation duration');
+});
+
+test('logout uses in-app confirmation dialog not browser confirm()', () => {
+  const appSrc = readFile('public/app.js');
+  const start = appSrc.indexOf("authActionBtn?.addEventListener('click'");
+  const logoutArea = appSrc.substring(start, start + 800);
+  assert.ok(!logoutArea.includes("confirm('Are you sure"), 'must not use browser confirm() for logout');
+  assert.ok(logoutArea.includes('askActionConfirm'), 'must use askActionConfirm for logout');
 });

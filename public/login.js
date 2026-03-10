@@ -16,6 +16,11 @@ const registerSecret = document.getElementById('registerSecret');
 const registerSubmit = document.getElementById('registerSubmit');
 const registerCancel = document.getElementById('registerCancel');
 const loginPanel = document.querySelector('.login-panel');
+const loginVersionBadge = document.getElementById('loginVersionBadge');
+
+fetch('/api/health').then(r => r.json()).then(d => {
+  if (loginVersionBadge && d.version) loginVersionBadge.textContent = 'VERSION: ' + d.version;
+}).catch(() => {});
 
 let registerSetupToken = '';
 let registerStage = 'username';

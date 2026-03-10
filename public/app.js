@@ -223,6 +223,7 @@ const DEFAULT_UPTIME_SCALE_ID = '1h';
 let sites = [];
 let activeEditor = null;
 let activeMetaEditorSiteId = null;
+let activeLanLinkEditorSiteId = null;
 const dirtyMetaSites = new Set();
 const uptimeScaleBySite = new Map();
 let autoRefreshMs = DEFAULT_AUTO_REFRESH_MS;
@@ -1328,7 +1329,21 @@ function populateClockForm(config = {}) {
   if (!clockConfigForm) return;
   const tz = clockConfigForm.querySelector('[name="globalClockTimeZone"]');
   const mode = clockConfigForm.querySelector('[name="globalClockHourMode"]');
-  if (tz) tz.value = config.globalClockTimeZone || 'UTC';
+  if (tz) {
+    if (tz.getElementsByTagName('option').length === 0) {
+      let zones = null;
+      if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+        try { zones = Intl.supportedValuesOf('timeZone'); } catch { /* ignore */ }
+      }
+      if (!zones || zones.length === 0) {
+        zones = ['UTC','America/Anchorage','America/Chicago','America/Denver','America/Edmonton','America/Halifax','America/Los_Angeles','America/New_York','America/Regina','America/St_Johns','America/Toronto','America/Vancouver','America/Winnipeg','Asia/Kolkata','Asia/Shanghai','Asia/Tokyo','Australia/Sydney','Europe/Berlin','Europe/London','Europe/Paris','Pacific/Auckland','Pacific/Honolulu'];
+      }
+      let html = '';
+      for (let i = 0; i < zones.length; i++) html += '<option value="' + zones[i] + '">' + zones[i].replace(/_/g, ' ') + '</option>';
+      tz.innerHTML = html;
+    }
+    tz.value = config.globalClockTimeZone || 'UTC';
+  }
   if (mode) mode.value = config.globalClockHourMode === '12h' ? '12h' : '24h';
 }
 
@@ -2160,7 +2175,7 @@ function ensureRefreshClockContent(admin = false) {
     actionButton.dataset.action = 'manual-refresh';
     const countdown = document.createElement('span');
     countdown.className = 'refresh-clock-countdown';
-    refreshClock.append(prefix, document.createTextNode(' '), actionButton, document.createTextNode(' '), countdown);
+    refreshClock.append(prefix, actionButton, countdown);
     refreshClockManualButton = actionButton;
     refreshClockCountdownSpan = countdown;
     refreshClockStaticSpan = null;
@@ -2373,10 +2388,12 @@ function collectRecentChanges(siteList = []) {
       const changedBy = shouldFallbackTickerActor(rawChangedBy)
         ? resolveTickerActorFromAudit(site, 'notifications', notificationsChanged, rawChangedBy)
         : rawChangedBy;
-      changes.push({
-        at: notificationsChanged,
-        text: `${prefix}: Notification targets updated by ${changedBy} ${formatRelativeTime(notificationsChanged)}`
-      });
+      if (!shouldFallbackTickerActor(changedBy)) {
+        changes.push({
+          at: notificationsChanged,
+          text: `${prefix}: Notification targets updated by ${changedBy} ${formatRelativeTime(notificationsChanged)}`
+        });
+      }
     }
 
     const monitorConfig = site.monitorConfig || {};
@@ -2387,10 +2404,12 @@ function collectRecentChanges(siteList = []) {
         const changedBy = shouldFallbackTickerActor(rawChangedBy)
           ? resolveTickerActorFromAudit(site, protocol, changedAt, rawChangedBy)
           : rawChangedBy;
-        changes.push({
-          at: changedAt,
-          text: `${prefix}: ${protocolLabel(protocol)} config updated by ${changedBy} ${formatRelativeTime(changedAt)}`
-        });
+        if (!shouldFallbackTickerActor(changedBy)) {
+          changes.push({
+            at: changedAt,
+            text: `${prefix}: ${protocolLabel(protocol)} config updated by ${changedBy} ${formatRelativeTime(changedAt)}`
+          });
+        }
       }
     });
   });
@@ -3131,6 +3150,9 @@ function renderServerSelfMonitorBadges(data = null, errorMessage = '', firewallP
   if (fwTotal > 0) {
     firewallTone = fwFail > 0 ? 'down' : (fwWarn > 0 ? 'warn' : (fwUnknown > 0 ? 'pending' : 'up'));
     firewallValue = `P${fwPass}/W${fwWarn}/F${fwFail}/U${fwUnknown}`;
+  } else if (firewallPayload && typeof firewallPayload === 'object') {
+    firewallTone = 'up';
+    firewallValue = 'N/A';
   }
 
   const badges = [
@@ -4833,14 +4855,26 @@ function lanLinkMonitorCard(site, metrics) {
 
   const hasData = totalCount > 0;
   const allowDelete = canAdmin();
+  const allowManage = canAdmin();
+  const showLanEditor = allowManage && activeLanLinkEditorSiteId === site.id;
   return `
     <article class="site-tile lan-link-card${hasData ? '' : ' is-device-down'}" data-site-id="${escapeHtml(site.id)}">
       <div class="site-top">
         <div class="site-details">
           <span class="lan-links-badge">LAN LINKS</span>
         </div>
-        ${allowDelete ? `<div class="top-controls"><button type="button" class="ghost-btn delete-device" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name || site.id)}">DELETE</button></div>` : ''}
+        <div class="top-controls">
+          ${allowManage ? `<button type="button" class="ghost-btn lan-link-edit-btn${showLanEditor ? ' active' : ''}" data-site-id="${escapeHtml(site.id)}">EDIT</button>` : ''}
+          ${allowDelete ? `<button type="button" class="ghost-btn lan-link-delete-btn delete-device" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name || site.id)}">DELETE</button>` : ''}
+        </div>
       </div>
+      ${showLanEditor
+        ? `<form class="lan-link-name-form" data-site-id="${escapeHtml(site.id)}">
+            <label class="meta-label"><span>Card Title</span><input name="name" value="${escapeHtml(site.name || '')}" /></label>
+            <div class="meta-actions"><button type="submit" class="meta-save">Save</button></div>
+            <span class="lan-link-save-msg"></span>
+          </form>`
+        : ''}
       <h4 class="metric-card-head">
         <span>LAN LINK MONITOR — ${escapeHtml(site.name)}</span>
         <span class="signal-flow-chip metric-head-flow ${hasData ? 'flow-on' : 'flow-off'}">${hasData ? `${upCount} UP / ${downCount} DN` : 'NO DATA'}</span>
@@ -4897,7 +4931,7 @@ function renderTiles() {
             </div>
           </div>
           <div class="tile-grid">
-            ${sectionSites.length ? sectionSites.map(siteTile).join('') : '<p class="empty">No devices configured.</p>'}
+            ${(() => { const tileSites = sectionSites.filter(s => !(normalizeRole(s.role) === 'other' && s.monitorConfig?.snmp?.enabled)); return tileSites.length ? tileSites.map(siteTile).join('') : (sectionSites.length ? '' : '<p class="empty">No devices configured.</p>'); })()}
             ${sectionSites.map(s => lanLinkMonitorCard(s, s.metrics || {})).join('')}
           </div>
         </section>
@@ -4980,8 +5014,7 @@ async function initialize() {
       // Version display degrades gracefully
     }
     await loadAlertSilenceState();
-    await loadAdminSections();
-    await loadDashboard();
+    await Promise.all([loadAdminSections(), loadDashboard()]);
   } catch (err) {
     setNotice(err.message);
   }
@@ -5036,7 +5069,7 @@ auditTrailBtn?.addEventListener('click', () => {
   if (!auditPanel) return;
   const opening = auditPanel.hidden;
   auditPanel.hidden = !auditPanel.hidden;
-  if (opening) loadAuditTrail().catch(() => {});
+  if (opening) { window.scrollTo(0, 0); loadAuditTrail().catch(() => {}); }
 });
 
 eventViewerBtn?.addEventListener('click', () => {
@@ -5091,6 +5124,7 @@ settingsBtn?.addEventListener('click', () => {
   if (!settingsPanel) return;
   settingsPanel.hidden = !settingsPanel.hidden;
   if (!settingsPanel.hidden) {
+    window.scrollTo(0, 0);
     loadManagedUsers().catch(() => {});
     loadSsoSettings().catch(() => {});
     loadRuntimeSettings().catch(() => {});
@@ -5165,11 +5199,19 @@ ssoLoginBtn?.addEventListener('click', () => {
 
 authActionBtn?.addEventListener('click', () => {
   if (authState.user?.authenticated) {
-    fetch('/api/auth/logout', { method: 'POST' })
-      .catch(() => {})
-      .finally(() => {
-        window.location.href = '/login.html';
-      });
+    askActionConfirm({
+      title: 'Log Out',
+      message: 'Are you sure you want to log out?',
+      confirmLabel: 'Log Out',
+      cancelLabel: 'Cancel'
+    }).then((ok) => {
+      if (!ok) return;
+      fetch('/api/auth/logout', { method: 'POST' })
+        .catch(() => {})
+        .finally(() => {
+          window.location.href = '/login.html';
+        });
+    });
     return;
   }
   if (authState.config?.enabled) {
@@ -6389,6 +6431,16 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  const lanLinkEditBtn = event.target.closest('.lan-link-edit-btn');
+  if (lanLinkEditBtn) {
+    if (!canAdmin()) return;
+    const siteId = lanLinkEditBtn.dataset.siteId || '';
+    if (!siteId) return;
+    activeLanLinkEditorSiteId = activeLanLinkEditorSiteId !== siteId ? siteId : null;
+    renderTiles();
+    return;
+  }
+
   const collectorDetailsToggle = event.target.closest('.collector-details-toggle');
   if (collectorDetailsToggle) {
     const siteId = collectorDetailsToggle.dataset.siteId || '';
@@ -6543,7 +6595,8 @@ document.addEventListener('click', (event) => {
           .catch((err) => {
             setNotice(`Collector update failed: ${err.message}`);
           });
-      });
+      })
+      .catch((err) => setNotice(err.message));
     return;
   }
 
@@ -6987,6 +7040,32 @@ document.addEventListener('submit', async (event) => {
     return;
   }
 
+  const lanLinkNameForm = event.target.closest('.lan-link-name-form');
+  if (lanLinkNameForm) {
+    if (!canAdmin()) return;
+    event.preventDefault();
+    const siteId = lanLinkNameForm.dataset.siteId || '';
+    const nameInput = lanLinkNameForm.querySelector('input[name="name"]');
+    const msg = lanLinkNameForm.querySelector('.lan-link-save-msg');
+    if (!siteId || !nameInput) return;
+    const newName = String(nameInput.value || '').trim();
+    if (!newName) { if (msg) msg.textContent = 'Name cannot be empty.'; return; }
+    if (msg) msg.textContent = 'Saving...';
+    try {
+      await getJson(`/api/sites/${encodeURIComponent(siteId)}/meta`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      });
+      activeLanLinkEditorSiteId = null;
+      showToast('Card title saved');
+      await loadDashboard();
+    } catch (err) {
+      if (msg) msg.textContent = err.message;
+    }
+    return;
+  }
+
   const notifyForm = event.target.closest('.notify-form');
   if (notifyForm) {
     if (!canAdmin()) return;
@@ -7176,6 +7255,66 @@ roadmapBtn?.addEventListener('click', () => {
 
 roadmapClose?.addEventListener('click', () => {
   roadmapDialog?.close();
+});
+
+document.getElementById('honkBtn')?.addEventListener('click', () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const t = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.45, t);
+    master.connect(ctx.destination);
+
+    // Fundamental — nasal sawtooth honk
+    const o1 = ctx.createOscillator();
+    const g1 = ctx.createGain();
+    o1.type = 'sawtooth';
+    o1.frequency.setValueAtTime(180, t);
+    o1.frequency.exponentialRampToValueAtTime(240, t + 0.04);
+    o1.frequency.exponentialRampToValueAtTime(210, t + 0.25);
+    o1.frequency.exponentialRampToValueAtTime(160, t + 0.5);
+    g1.gain.setValueAtTime(0, t);
+    g1.gain.linearRampToValueAtTime(0.6, t + 0.03);
+    g1.gain.setValueAtTime(0.6, t + 0.12);
+    g1.gain.linearRampToValueAtTime(0.35, t + 0.35);
+    g1.gain.linearRampToValueAtTime(0, t + 0.52);
+    o1.connect(g1).connect(master);
+
+    // Harmonic — square wave overtone for raspy texture
+    const o2 = ctx.createOscillator();
+    const g2 = ctx.createGain();
+    o2.type = 'square';
+    o2.frequency.setValueAtTime(360, t);
+    o2.frequency.exponentialRampToValueAtTime(480, t + 0.04);
+    o2.frequency.exponentialRampToValueAtTime(420, t + 0.25);
+    o2.frequency.exponentialRampToValueAtTime(320, t + 0.5);
+    g2.gain.setValueAtTime(0, t);
+    g2.gain.linearRampToValueAtTime(0.18, t + 0.03);
+    g2.gain.linearRampToValueAtTime(0.1, t + 0.3);
+    g2.gain.linearRampToValueAtTime(0, t + 0.5);
+    o2.connect(g2).connect(master);
+
+    // Noise burst for the breathy attack
+    const bufLen = ctx.sampleRate * 0.12;
+    const noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const noiseData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) noiseData[i] = (Math.random() * 2 - 1) * 0.5;
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuf;
+    const ng = ctx.createGain();
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass';
+    nf.frequency.value = 800;
+    nf.Q.value = 2;
+    ng.gain.setValueAtTime(0.3, t);
+    ng.gain.linearRampToValueAtTime(0, t + 0.1);
+    noise.connect(nf).connect(ng).connect(master);
+
+    o1.start(t); o1.stop(t + 0.55);
+    o2.start(t); o2.stop(t + 0.53);
+    noise.start(t); noise.stop(t + 0.12);
+    o1.onended = () => ctx.close();
+  } catch { /* no audio support */ }
 });
 
 addLocationCancel?.addEventListener('click', () => {

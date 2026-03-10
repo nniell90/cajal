@@ -44,7 +44,7 @@ body {
 }
 
 .login-panel {
-  width: min(420px, 100%);
+  width: min(500px, 100%);
   display: grid;
   gap: 0.45rem;
   position: relative;
@@ -89,6 +89,20 @@ body {
 .login-panel h1 {
   margin: 0;
   font-size: 1.35rem;
+}
+
+.login-version-badge {
+  display: inline-block;
+  border: 1px solid rgba(101, 208, 154, 0.65);
+  background: rgba(7, 62, 54, 0.55);
+  color: #c8efe0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.44rem;
+  line-height: 1.25;
+  vertical-align: middle;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .login-panel p {
@@ -319,7 +333,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.18rem;
+  gap: 0.45rem;
   min-width: 0;
   width: min(100%, 22rem);
   padding: 0.18rem 0.5rem;
@@ -1615,7 +1629,7 @@ body {
   min-width: max-content;
   padding-left: 0;
   will-change: transform;
-  animation: ticker-scroll 59s linear infinite;
+  animation: ticker-scroll 94s linear infinite;
 }
 
 @keyframes ticker-scroll {
@@ -1707,8 +1721,15 @@ button:hover {
   border-color: rgba(247, 177, 115, 0.95);
 }
 
+.roadmap-dialog {
+  overflow: hidden;
+  max-width: min(420px, 90vw);
+}
+
 .roadmap-dialog .roadmap-form {
-  width: min(420px, 92vw);
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .roadmap-list {
@@ -1722,6 +1743,16 @@ button:hover {
 
 .roadmap-list li + li {
   margin-top: 0.16rem;
+}
+
+.honk-btn {
+  color: #f5c842;
+  border-color: rgba(245, 200, 66, 0.5);
+}
+
+.honk-btn:hover {
+  background: rgba(245, 200, 66, 0.15);
+  border-color: #f5c842;
 }
 
 .company-name-panel {
@@ -4284,6 +4315,60 @@ button.flow-btn:hover {
   display: flex;
   flex-direction: column;
   padding: 0.45rem;
+  position: relative;
+}
+
+.lan-link-card .top-controls {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.lan-link-edit-btn {
+  color: var(--accent);
+  border-color: rgba(101, 208, 154, 0.5);
+  font-size: 0.64rem;
+}
+
+.lan-link-edit-btn:hover,
+.lan-link-edit-btn.active {
+  background: rgba(101, 208, 154, 0.15);
+  border-color: var(--accent);
+}
+
+.lan-link-delete-btn {
+  color: #ff6b6b;
+  border-color: rgba(255, 100, 100, 0.5);
+  font-size: 0.64rem;
+}
+
+.lan-link-delete-btn:hover {
+  background: rgba(255, 80, 80, 0.15);
+  border-color: #ff6b6b;
+}
+
+.lan-link-name-form {
+  padding: 0.4rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.lan-link-name-form .meta-label {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.lan-link-name-form .meta-actions {
+  margin: 0;
+}
+
+.lan-link-save-msg {
+  font-size: 0.65rem;
+  color: var(--muted);
 }
 
 .lan-link-table {
@@ -4395,6 +4480,10 @@ label {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+label[hidden] {
+  display: none;
 }
 
 input,

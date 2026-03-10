@@ -629,7 +629,11 @@ const { createHttpHandler } = require('./lib/router');
 const { pruneTotpLastUsedStep } = require('./lib/routes/auth');
 
 const defaultData = {
-  sites: [],
+  sites: [
+    { id: 'site-hq', name: 'Demo Firewall', category: 'internal', role: 'firewall' },
+    { id: 'site-demo-collector', name: 'Demo Collector', category: 'internal', role: 'collector' },
+    { id: 'site-demo-lanlinks', name: 'Demo LAN Links', category: 'internal', role: 'other' }
+  ],
   devices: []
 };
 
@@ -668,7 +672,7 @@ async function ensureDataFiles() {
 
   if (!hasSites || !hasDevices) {
     const initial = {
-      sites: clone(defaultData.sites),
+      sites: clone(defaultData.sites).map((s, i) => normalizeImportedSite(s, i)),
       devices: clone(defaultData.devices)
     };
     await persistSites(initial.sites);

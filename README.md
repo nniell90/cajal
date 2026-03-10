@@ -12,6 +12,39 @@ This README is the canonical operator/developer guide for running and extending 
 
 ## Patch Notes {#patch-notes}
 
+- Version 2.0.8:
+  - **LAN Link EDIT button** — inline title editing on LAN Link Monitor cards
+  - **FW CHECK badge fix** — shows "N/A" when no firewall checks apply instead of stuck on "Checking"
+  - **In-app logout confirmation** — styled dialog replaces browser confirm() popup
+  - **Ticker improvements** — system-attributed changes filtered out (user-only), speed tuned to 94s
+  - **TOTP issuer** — hardcoded to "Cajal ICBM: username" for consistent authenticator labels
+  - **Refresh clock spacing** — even gap between all elements via flex gap
+  - **Roadmap dialog** — scrollbar removed, "Settings UI update" added to roadmap
+  - **HONK** — goose honk button in roadmap dialog
+  - **Default seed data** — fresh installs include Demo Firewall, Demo Collector, and Demo LAN Links cards
+  - Bug fix: missing .catch() on agent update promise chain
+  - 274 unit tests (up from 269)
+
+- Version 2.0.7:
+  - **Bridge networking** — Docker Compose switched from host to bridge network with explicit port bindings for cleaner isolation
+  - **Docker secrets** — database password managed via Docker secrets (`/run/secrets/db_password`) instead of environment variables
+  - **Agent session persistence** — collector agent sessions survive server restarts (persisted to Postgres)
+  - **QA hardening (31 fixes)** — error safety in all catch blocks, input validation on devices/sites, OAuth fetch timeout, OAuth state TTL, CSP tightening, logout rate limiting, backup password minimum raised to 16 characters
+  - **LAN Link Monitor** — dedicated card type for SNMP interface monitoring (add via "LAN Links" device type)
+  - **Settings tabs** — settings panel reorganized into tabbed sections for cleaner navigation
+  - **SNMP interface monitoring** — real-time LAN interface status, speed, throughput, and utilization table
+  - **Auth on agent downloads** — Linux and Windows agent download endpoints now require authentication
+  - **JWT verification for Entra SSO** — fetches JWKS and verifies RS256 signatures on SSO tokens
+  - **Async auth check** — replaces sync XHR with async fetch (no more blank page flash on load)
+  - **ARIA accessibility** — settings tabs, ghost buttons, and form inputs have proper ARIA roles and labels
+  - **Submit button guards** — async form submissions (device, user, location) disable the submit button to prevent double-submits
+  - **Docker healthcheck** — `cajal` service has a health check (`/api/health`)
+  - **Non-root container** — Dockerfile runs as `node` user
+  - **Version check** — uses GHCR tags API instead of GitHub Releases for more reliable update detection
+  - Dead code cleanup (~450 lines removed: welcome wizard, unused themes, duplicate helpers)
+  - Code refactoring: unified protocol flow indicators, extracted shared helpers, removed orphaned DOM refs
+  - 269 unit tests (256 Node + 13 Python, up from 256)
+
 - Version 1.6:
   - **Security hardening** — all data endpoints now require authentication (sites, devices, alerts, topology, summary, public-services, location-monitors, settings/locations, agent/collectors)
   - Unauthenticated health probe at `/api/healthz` for load balancers and Docker health checks

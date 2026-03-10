@@ -12,6 +12,13 @@ This README is the canonical operator/developer guide for running and extending 
 
 ## Patch Notes {#patch-notes}
 
+- Version 2.0.9:
+  - **Settings UI polish** — flush-aligned buttons, compact accordion sections, consistent font sizing
+  - **Install reliability** — auto-create `.db_password` secret file in docker-reload.sh and install.bat
+  - **Login hardening** — submit debouncing prevents double-login, dead code cleanup
+  - **Version check fix** — event listener leak on re-render resolved with `{ once: true }`
+  - 5 new regression tests (279 total)
+
 - Version 2.0.8:
   - **LAN Link EDIT button** — inline title editing on LAN Link Monitor cards
   - **FW CHECK badge fix** — shows "N/A" when no firewall checks apply instead of stuck on "Checking"

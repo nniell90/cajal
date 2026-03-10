@@ -1,6 +1,5 @@
 const loginForm = document.getElementById('loginForm');
 const loginMsg = document.getElementById('loginMsg');
-const registerBtn = document.getElementById('registerBtn');
 const registerDialog = document.getElementById('registerDialog');
 const registerForm = document.getElementById('registerForm');
 const registerMsg = document.getElementById('registerMsg');
@@ -151,11 +150,14 @@ function openRegisterDialog(prefillUsername = '') {
 
 loginForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  const submitBtn = loginForm.querySelector('button[type="submit"]');
+  if (submitBtn?.disabled) return;
   const formData = new FormData(loginForm);
   const username = String(formData.get('username') || '').trim().toLowerCase();
   const password = String(formData.get('password') || '');
   const totp = String(formData.get('totp') || '').trim();
   if (!username || !password) return;
+  if (submitBtn) submitBtn.disabled = true;
   if (loginMsg) loginMsg.textContent = 'Signing in...';
 
   try {
@@ -217,12 +219,9 @@ loginForm?.addEventListener('submit', async (event) => {
     window.location.replace('/');
   } catch (err) {
     if (loginMsg) loginMsg.textContent = err.message;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
-});
-
-registerBtn?.addEventListener('click', () => {
-  const prefill = document.getElementById('username')?.value || '';
-  openRegisterDialog(prefill);
 });
 
 registerCancel?.addEventListener('click', () => {

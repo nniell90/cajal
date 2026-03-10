@@ -778,3 +778,40 @@ test('logout uses in-app confirmation dialog not browser confirm()', () => {
   assert.ok(!logoutArea.includes("confirm('Are you sure"), 'must not use browser confirm() for logout');
   assert.ok(logoutArea.includes('askActionConfirm'), 'must use askActionConfirm for logout');
 });
+
+test('version check buttons use { once: true } to prevent listener leaks', () => {
+  const appSrc = readFile('public/app.js');
+  const checkBtn = appSrc.indexOf("getElementById('checkUpdatesBtn')");
+  assert.ok(checkBtn > 0, 'checkUpdatesBtn must exist');
+  const checkArea = appSrc.substring(checkBtn, checkBtn + 200);
+  assert.ok(checkArea.includes('once: true'), 'checkUpdatesBtn must use { once: true }');
+  const applyBtn = appSrc.indexOf("getElementById('applyUpdateBtn')");
+  if (applyBtn > 0) {
+    const applyArea = appSrc.substring(applyBtn, applyBtn + 200);
+    assert.ok(applyArea.includes('once: true'), 'applyUpdateBtn must use { once: true }');
+  }
+});
+
+test('login form disables submit button to prevent double-submit', () => {
+  const loginSrc = readFile('public/login.js');
+  assert.ok(loginSrc.includes('submitBtn?.disabled') || loginSrc.includes('submitBtn.disabled'), 'login form must check/set disabled on submit button');
+  assert.ok(loginSrc.includes("submitBtn) submitBtn.disabled = true"), 'login submit must disable button');
+  assert.ok(loginSrc.includes("submitBtn) submitBtn.disabled = false"), 'login submit must re-enable button in finally');
+});
+
+test('login.js has no dead registerBtn reference', () => {
+  const loginSrc = readFile('public/login.js');
+  assert.ok(!loginSrc.includes("getElementById('registerBtn')"), 'registerBtn element reference must be removed (element does not exist)');
+});
+
+test('docker-reload.sh creates .db_password file from env', () => {
+  const script = readFile('docker-reload.sh');
+  assert.ok(script.includes('.db_password'), 'script must reference .db_password file');
+  assert.ok(script.includes("printf '%s'") || script.includes('> .db_password'), 'script must write password to .db_password');
+  assert.ok(script.includes('chmod 600 .db_password'), 'script must set restrictive permissions on .db_password');
+});
+
+test('install.bat creates .db_password file from env', () => {
+  const script = readFile('install.bat');
+  assert.ok(script.includes('.db_password'), 'install.bat must reference .db_password file');
+});

@@ -7587,7 +7587,7 @@ function renderVersionCheckSection(result = null, loading = false, statusMsg = '
         <span class="version-check-current">Version: <strong>${escapeHtml(currentLabel)}</strong></span>
         <button id="checkUpdatesBtn" type="button" class="ghost-btn version-check-btn">Check for Updates</button>
       </div>`;
-    document.getElementById('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
+    document.getElementById('checkUpdatesBtn')?.addEventListener('click', checkForUpdates, { once: true });
     return;
   }
   if (!result.configured) {
@@ -7626,8 +7626,8 @@ function renderVersionCheckSection(result = null, loading = false, statusMsg = '
       <button id="checkUpdatesBtn" type="button" class="ghost-btn version-check-btn">Re-check</button>
     </div>
     ${updateCard}`;
-  document.getElementById('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
-  document.getElementById('applyUpdateBtn')?.addEventListener('click', applyUpdate);
+  document.getElementById('checkUpdatesBtn')?.addEventListener('click', checkForUpdates, { once: true });
+  document.getElementById('applyUpdateBtn')?.addEventListener('click', applyUpdate, { once: true });
 }
 
 async function checkForUpdates() {

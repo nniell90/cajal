@@ -108,6 +108,14 @@ ensure_env() {
     fi
   fi
 
+  # ── Sync .db_password file from CAJAL_DB_PASSWORD ────────────────────────
+  local current_db_pass
+  current_db_pass="$(grep -E '^CAJAL_DB_PASSWORD=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
+  if [ -n "$current_db_pass" ]; then
+    printf '%s' "$current_db_pass" > .db_password
+    chmod 600 .db_password
+  fi
+
   # ── Auto-generate CAJAL_WATCHTOWER_TOKEN if missing or default ────────────
   local wt_token
   wt_token="$(grep -E '^CAJAL_WATCHTOWER_TOKEN=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"

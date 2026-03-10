@@ -679,12 +679,13 @@ body {
   display: flex;
   gap: 0.25rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .settings-section {
-  margin-top: 0.38rem;
+  margin-top: 0.25rem;
   border-top: 1px solid rgba(214, 141, 91, 0.45);
-  padding-top: 0.32rem;
+  padding-top: 0.25rem;
 }
 
 .settings-toggle {
@@ -696,8 +697,8 @@ body {
   background: rgba(150, 86, 35, 0.34);
   color: #ffe5d0;
   border: 1px solid rgba(214, 141, 91, 0.58);
-  padding: 0.28rem 0.36rem;
-  font-size: 0.68rem;
+  padding: 0.2rem 0.32rem;
+  font-size: 0.66rem;
   letter-spacing: 0.04em;
 }
 
@@ -716,7 +717,7 @@ body {
 }
 
 .settings-content {
-  margin-top: 0.3rem;
+  margin-top: 0.22rem;
 }
 
 .settings-section.is-collapsed .settings-content {
@@ -737,9 +738,19 @@ body {
   gap: 0.22rem;
 }
 
+.sso-config-form > button[type="submit"] {
+  justify-self: start;
+  padding: 0.2rem 0.6rem;
+}
+
 .settings-compact-form {
   display: grid;
   gap: 0.22rem;
+}
+
+.settings-compact-form > button[type="submit"] {
+  justify-self: start;
+  padding: 0.2rem 0.6rem;
 }
 
 .settings-compact-form textarea {
@@ -755,12 +766,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.34rem;
-  min-height: 1.72rem;
-  padding: 0 0.46rem;
+  padding: 0.2rem 0.4rem;
   border: 1px solid rgba(214, 141, 91, 0.45);
   background: rgba(150, 86, 35, 0.13);
   color: #ffe5d0;
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -775,7 +785,8 @@ body {
 }
 
 .runtime-factory-actions .meta-delete {
-  min-height: 1.72rem;
+  font-size: 0.64rem;
+  padding: 0.2rem 0.5rem;
 }
 
 .runtime-factory-hint {
@@ -966,8 +977,13 @@ body {
 }
 
 .settings-panel .settings-content button {
-  font-size: 0.66rem;
-  padding: 0.22rem 0.38rem;
+  font-size: 0.64rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.settings-actions button {
+  font-size: 0.64rem;
+  padding: 0.2rem 0.5rem;
 }
 
 #ssoConfigMsg {

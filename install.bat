@@ -169,6 +169,12 @@ if %errorlevel% neq 0 (
     echo   INFO: CAJAL_DB_PASSWORD auto-generated
 )
 
+:: ── Sync .db_password file from CAJAL_DB_PASSWORD ────────────────────────────
+for /f "tokens=2 delims==" %%D in ('findstr /B "CAJAL_DB_PASSWORD=" .env') do (
+    echo|set /p="%%D"> .db_password
+    echo   INFO: .db_password synced from .env
+)
+
 :: ── Auto-generate CAJAL_WATCHTOWER_TOKEN if missing ──────────────────────────
 findstr /B "CAJAL_WATCHTOWER_TOKEN=" .env >nul 2>&1
 if %errorlevel% neq 0 (

@@ -34,12 +34,10 @@ test('settings include dedicated API section with token controls', () => {
   assert.match(html, /id="apiTokenList"/);
 });
 
-test('api section includes windows agent exe package controls', () => {
+test('api section does not include windows agent upload controls', () => {
   const html = readFile('public/index.html');
-  assert.match(html, /id="windowsAgentPackageForm"/);
-  assert.match(html, /id="windowsAgentPackageFile"/);
-  assert.match(html, /id="windowsAgentPackageUploadBtn"/);
-  assert.match(html, /id="windowsAgentPackageDeleteBtn"/);
+  assert.ok(!html.includes('windowsAgentPackageForm'), 'Upload form should be removed');
+  assert.ok(!html.includes('windowsAgentPackageUploadBtn'), 'Upload button should be removed');
 });
 
 test('agent setup dialog submit button updates text for platform', () => {

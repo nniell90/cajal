@@ -113,11 +113,6 @@ const apiTokenRevealValue = document.getElementById('apiTokenRevealValue');
 const apiTokenCopyBtn = document.getElementById('apiTokenCopyBtn');
 const apiTokenList = document.getElementById('apiTokenList');
 const apiTokenMsg = document.getElementById('apiTokenMsg');
-const windowsAgentPackageForm = document.getElementById('windowsAgentPackageForm');
-const windowsAgentPackageFile = document.getElementById('windowsAgentPackageFile');
-const windowsAgentPackageUploadBtn = document.getElementById('windowsAgentPackageUploadBtn');
-const windowsAgentPackageDeleteBtn = document.getElementById('windowsAgentPackageDeleteBtn');
-const windowsAgentPackageMsg = document.getElementById('windowsAgentPackageMsg');
 const mySecurityPanel = document.getElementById('mySecurityPanel');
 const mySecurityMsg = document.getElementById('mySecurityMsg');
 const resetOwnTotpBtn = document.getElementById('resetOwnTotpBtn');
@@ -2955,45 +2950,6 @@ async function loadApiTokenSettings() {
   }
 }
 
-async function loadWindowsAgentPackageStatus() {
-  if (!canAdmin()) return;
-  if (!windowsAgentPackageMsg) return;
-  try {
-    const payload = await getJson('/api/settings/agent/windows-package');
-    const uploaded = payload?.uploaded || {};
-    const bundled = payload?.bundled || {};
-    const maxBytes = Number(payload?.maxBytes || 0);
-    const parts = [];
-    if (uploaded.available) {
-      parts.push(`Uploaded package: ${uploaded.fileName || 'cajal-windows-agent.exe'} (${formatBytes(uploaded.sizeBytes || 0)})`);
-    } else {
-      parts.push('Uploaded package: none');
-    }
-    if (bundled.available) {
-      parts.push(`Bundled package: ${bundled.fileName || 'cajal-windows-agent.exe'} (${formatBytes(bundled.sizeBytes || 0)})`);
-    } else {
-      parts.push('Bundled package: none');
-    }
-    if (maxBytes > 0) parts.push(`Max upload size: ${formatBytes(maxBytes)}`);
-    windowsAgentPackageMsg.textContent = parts.join(' | ');
-    if (windowsAgentPackageDeleteBtn) windowsAgentPackageDeleteBtn.disabled = !uploaded.available;
-  } catch (err) {
-    windowsAgentPackageMsg.textContent = err.message;
-    if (windowsAgentPackageDeleteBtn) windowsAgentPackageDeleteBtn.disabled = true;
-  }
-}
-
-async function fileToBase64(file) {
-  if (!(file instanceof File)) throw new Error('No file selected');
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
 
 async function loadSslSettings() {
   return loadAdminSettings('/api/settings/ssl', (data) => {
@@ -5145,7 +5101,6 @@ settingsBtn?.addEventListener('click', () => {
     loadFirewallCheck().catch(() => {});
     loadStorageSummary().catch(() => {});
     loadApiTokenSettings().catch(() => {});
-    loadWindowsAgentPackageStatus().catch(() => {});
     loadErrorLogs().catch(() => {});
     loadDiagnosticsLogs().catch(() => {});
     loadRawTelemetry().catch(() => {});
@@ -5797,60 +5752,6 @@ apiTokenList?.addEventListener('click', async (event) => {
   }
 });
 
-windowsAgentPackageForm?.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  if (!canAdmin()) return;
-  if (!windowsAgentPackageFile?.files?.length) {
-    if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = 'Choose a .exe file first.';
-    return;
-  }
-  const selectedFile = windowsAgentPackageFile.files[0];
-  if (!selectedFile) return;
-  if (windowsAgentPackageUploadBtn) windowsAgentPackageUploadBtn.disabled = true;
-  if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = `Uploading ${selectedFile.name}...`;
-  try {
-    const fileDataBase64 = await fileToBase64(selectedFile);
-    await getJson('/api/settings/agent/windows-package', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileName: selectedFile.name,
-        fileDataBase64
-      })
-    });
-    await loadWindowsAgentPackageStatus();
-    if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = `Uploaded ${selectedFile.name}. Windows .exe download is ready.`;
-    windowsAgentPackageForm.reset();
-    showToast('Settings Saved');
-  } catch (err) {
-    if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = err.message;
-  } finally {
-    if (windowsAgentPackageUploadBtn) windowsAgentPackageUploadBtn.disabled = false;
-  }
-});
-
-windowsAgentPackageDeleteBtn?.addEventListener('click', async () => {
-  if (!canAdmin()) return;
-  const confirmed = await askActionConfirm({
-    title: 'Remove Windows .exe Upload',
-    message: 'Remove the uploaded Windows agent package from Settings storage?',
-    confirmLabel: 'Remove',
-    cancelLabel: 'Cancel',
-    dangerous: true
-  });
-  if (!confirmed) return;
-  if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = 'Removing uploaded package...';
-  try {
-    await getJson('/api/settings/agent/windows-package', {
-      method: 'DELETE'
-    });
-    await loadWindowsAgentPackageStatus();
-    if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = 'Uploaded Windows package removed.';
-    showToast('Settings Saved');
-  } catch (err) {
-    if (windowsAgentPackageMsg) windowsAgentPackageMsg.textContent = err.message;
-  }
-});
 
 webhookRoutingContent?.addEventListener('click', async (event) => {
   if (!canAdmin()) return;

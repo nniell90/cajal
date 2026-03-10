@@ -7,7 +7,9 @@ services:
     environment:
       POSTGRES_DB: ${CAJAL_DB_NAME:-cajal}
       POSTGRES_USER: ${CAJAL_DB_USER:-cajal}
-      POSTGRES_PASSWORD: ${CAJAL_DB_PASSWORD:-cajal}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
     volumes:
       - cajal-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,23 +22,30 @@ services:
   cajal:
     image: ghcr.io/nniell90/cajal:latest
     container_name: cajal-app
-    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:${PORT:-4000}:${PORT:-4000}"
+      - "0.0.0.0:${CAJAL_SYSLOG_TCP_PORT:-5514}:${CAJAL_SYSLOG_TCP_PORT:-5514}/tcp"
+      - "0.0.0.0:${CAJAL_SYSLOG_UDP_PORT:-5514}:${CAJAL_SYSLOG_UDP_PORT:-5514}/udp"
+      - "0.0.0.0:${CAJAL_NETFLOW_PORT:-2055}:${CAJAL_NETFLOW_PORT:-2055}/udp"
     env_file: .env
+    secrets:
+      - db_password
     environment:
-      PORT: 4000
+      PORT: ${PORT:-4000}
       CAJAL_STORAGE_BACKEND: postgres
-      CAJAL_DATABASE_URL: postgresql://${CAJAL_DB_USER:-cajal}:${CAJAL_DB_PASSWORD:-cajal}@127.0.0.1:5432/${CAJAL_DB_NAME:-cajal}
+      CAJAL_DATABASE_URL: postgresql://${CAJAL_DB_USER:-cajal}:${CAJAL_DB_PASSWORD:-cajal}@cajal-postgres:5432/${CAJAL_DB_NAME:-cajal}
       CAJAL_DATABASE_SSL: disable
-      CAJAL_WATCHTOWER_URL: http://127.0.0.1:8080
+      CAJAL_WATCHTOWER_URL: http://cajal-watchtower:8080
       CAJAL_WATCHTOWER_TOKEN: ${CAJAL_WATCHTOWER_TOKEN:-}
+      CAJAL_DB_PASSWORD_FILE: /run/secrets/db_password
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:4000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-4000}/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -72,6 +81,10 @@ services:
       WATCHTOWER_CLEANUP: "true"
     command: --http-api-update --interval 86400
     restart: unless-stopped
+
+secrets:
+  db_password:
+    file: ${CAJAL_DB_PASSWORD_FILE:-.db_password}
 
 volumes:
   cajal-postgres-data:

@@ -218,18 +218,6 @@
             <div id="apiTokenList" class="api-token-list">
               <p class="empty">No API tokens yet.</p>
             </div>
-            <div class="settings-subblock">
-              <h4>Windows Agent .exe Package</h4>
-              <form id="windowsAgentPackageForm" class="settings-compact-form api-token-form">
-                <label>Executable
-                  <input id="windowsAgentPackageFile" type="file" accept=".exe,application/octet-stream" />
-                </label>
-                <button id="windowsAgentPackageUploadBtn" type="submit">Upload .exe</button>
-                <button id="windowsAgentPackageDeleteBtn" type="button" class="ghost-btn">Remove Upload</button>
-              </form>
-              <p class="webhook-routing-help">Used by Windows collector enrollment when requesting <code>/api/agent/windows/download?format=exe</code>.</p>
-              <p id="windowsAgentPackageMsg"></p>
-            </div>
             <p id="apiTokenMsg"></p>
           </div>
         </section>

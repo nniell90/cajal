@@ -229,21 +229,12 @@ test('teams webhook retry helpers classify retryable statuses and errors', () =>
   assert.equal(core.teamsWebhookRetryableError({ code: 'EINVAL' }), false);
 });
 
-test('windows agent package helpers sanitize file names and payload metadata', () => {
+test('isWindowsExeBuffer detects MZ header', () => {
+  const { isWindowsExeBuffer } = require('../lib/settings');
   const payload = Buffer.from('MZ-test-agent', 'utf8');
-  const normalized = core.normalizeWindowsAgentPackageSettings({
-    fileName: '../Collector Agent',
-    sizeBytes: payload.length,
-    uploadedAt: '2026-02-25T12:00:00.000Z',
-    sha256: 'ABCDEF',
-    dataBase64: `data:application/octet-stream;base64,${payload.toString('base64')}`
-  });
-  assert.equal(core.sanitizeWindowsAgentPackageFileName('../Collector Agent'), 'Collector_Agent.exe');
-  assert.equal(normalized.fileName, 'Collector_Agent.exe');
-  assert.equal(normalized.sizeBytes, payload.length);
-  assert.equal(normalized.sha256, 'abcdef');
-  assert.equal(core.isWindowsExeBuffer(payload), true);
-  assert.equal(core.windowsAgentPackageForClient(normalized).available, true);
+  assert.equal(isWindowsExeBuffer(payload), true);
+  assert.equal(isWindowsExeBuffer(Buffer.from('not-exe')), false);
+  assert.equal(isWindowsExeBuffer(null), false);
 });
 
 test('api token sanitization keeps valid rows and enforces role/name normalization', () => {
@@ -1792,21 +1783,22 @@ test('matchSiteBySourceIp works for netflow protocol too', () => {
   assert.equal(noMatch, undefined, 'must not cross-match protocols');
 });
 
-test('docker-compose.yml uses network_mode: host for cajal container', () => {
+test('docker-compose.yml uses bridge network with explicit port bindings for cajal', () => {
   const composeSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'docker-compose.yml'), 'utf8');
-  assert.ok(composeSrc.includes('network_mode: host'), 'cajal container must use host networking to preserve source IPs');
+  assert.ok(!composeSrc.includes('network_mode: host'), 'cajal container must not use host networking');
 
-  // Must NOT have port mappings on the cajal service (host mode binds directly)
   const cajalBlock = composeSrc.substring(
     composeSrc.indexOf('cajal:'),
     composeSrc.indexOf('socket-proxy:')
   );
-  assert.ok(!cajalBlock.includes('- "4000:4000"'), 'cajal service must not have port mappings when using host networking');
-  assert.ok(!cajalBlock.includes('- "5514:5514'), 'cajal service must not have syslog port mappings when using host networking');
+  // HTTP port bound to localhost only
+  assert.ok(cajalBlock.includes('127.0.0.1:'), 'HTTP port must bind to localhost');
+  // Syslog/netflow ports bound to 0.0.0.0 for LAN agents
+  assert.ok(cajalBlock.includes('0.0.0.0:'), 'syslog/netflow ports must bind to all interfaces');
 
-  // DB and Watchtower URLs must use 127.0.0.1, not container names
-  assert.ok(cajalBlock.includes('127.0.0.1:5432'), 'database URL must use 127.0.0.1 (not container name) with host networking');
-  assert.ok(cajalBlock.includes('127.0.0.1:8080'), 'watchtower URL must use 127.0.0.1 (not container name) with host networking');
+  // DB and Watchtower URLs must use container names (bridge network)
+  assert.ok(cajalBlock.includes('cajal-postgres:5432'), 'database URL must use container name with bridge network');
+  assert.ok(cajalBlock.includes('cajal-watchtower:8080'), 'watchtower URL must use container name with bridge network');
 });
 
 test('docker-compose.yml binds postgres and watchtower to localhost only', () => {

@@ -112,7 +112,6 @@ const {
   DEFAULT_TEAMS_WEBHOOK_TIMEOUT_MS,
   TEAMS_WEBHOOK_MAX_ATTEMPTS,
   TEAMS_WEBHOOK_RETRY_BASE_MS,
-  WINDOWS_AGENT_PACKAGE_MAX_BYTES,
   DATABASE_POOL_MAX,
   DATABASE_POOL_IDLE_TIMEOUT_MS,
   DATABASE_POOL_CONNECTION_TIMEOUT_MS,
@@ -146,7 +145,6 @@ const {
   LOCATION_SETTINGS_FILE,
   BACKUP_META_FILE,
   API_TOKENS_FILE,
-  WINDOWS_AGENT_PACKAGE_FILE,
   LINUX_AGENT_SCRIPT_FILE,
   WINDOWS_AGENT_SCRIPT_FILE,
   WINDOWS_AGENT_EXE_FILE,
@@ -174,7 +172,6 @@ const {
   defaultLocationSettings,
   defaultBackupMeta,
   defaultApiTokenSettings,
-  defaultWindowsAgentPackageSettings,
   STORAGE_TRACKED_FILES,
   STORAGE_TRACKED_FILE_KEYS,
 } = require('./lib/constants');
@@ -469,14 +466,6 @@ const {
   persistRuntimeSettings,
   loadApiTokenSettings,
   persistApiTokenSettings,
-  sanitizeWindowsAgentPackageFileName,
-  normalizeWindowsAgentPackageBase64,
-  isWindowsExeBuffer,
-  decodeWindowsAgentPackageBuffer,
-  normalizeWindowsAgentPackageSettings,
-  windowsAgentPackageForClient,
-  loadWindowsAgentPackageSettings,
-  persistWindowsAgentPackageSettings,
   sanitizeSslSettings,
   sslConfigForClient,
   loadSslSettings,
@@ -544,6 +533,7 @@ const {
   runCollectorTerminalCommand,
   factoryResetBaselineUsers,
   performFactoryResetForDeployment,
+  restoreCollectorAgentSessions,
 } = require('./lib/agent');
 
 const {
@@ -669,7 +659,6 @@ async function ensureDataFiles() {
   const hasSsl = await smartFileExists(SSL_FILE);
   const hasRuntime = await smartFileExists(RUNTIME_FILE);
   const hasApiTokens = await smartFileExists(API_TOKENS_FILE);
-  const hasWindowsAgentPackage = await smartFileExists(WINDOWS_AGENT_PACKAGE_FILE);
   const hasLocationSettings = await smartFileExists(LOCATION_SETTINGS_FILE);
   const hasEvents = await smartFileExists(EVENTS_FILE);
   const hasErrorLog = await smartFileExists(ERROR_LOG_FILE);
@@ -707,10 +696,6 @@ async function ensureDataFiles() {
   if (!hasApiTokens) {
     await persistApiTokenSettings(defaultApiTokenSettings);
     seededKeys.push('apiTokens');
-  }
-  if (!hasWindowsAgentPackage) {
-    await persistWindowsAgentPackageSettings(defaultWindowsAgentPackageSettings);
-    seededKeys.push('windowsAgentPackage');
   }
   if (!hasLocationSettings) {
     await smartWriteFile(LOCATION_SETTINGS_FILE, JSON.stringify(defaultLocationSettings, null, 2), 'utf8');
@@ -898,6 +883,9 @@ async function main() {
   getCryptoKey();
   await initStorageBackend();
   const state = await loadState();
+  await restoreCollectorAgentSessions(state).catch((err) => {
+    console.warn(`Agent session restore skipped: ${err?.message || err}`);
+  });
   if (Array.isArray(state.startupBootstrapSeededKeys) && state.startupBootstrapSeededKeys.length) {
     const seededDetail = state.startupBootstrapSeededKeys.join(', ');
     logEvent(state, {
@@ -1207,11 +1195,6 @@ module.exports = {
     smtpDotStuffMessage,
     parseSmtpResponseLine,
     smtpCapabilitiesFromResponse,
-    normalizeWindowsAgentPackageBase64,
-    sanitizeWindowsAgentPackageFileName,
-    normalizeWindowsAgentPackageSettings,
-    windowsAgentPackageForClient,
-    isWindowsExeBuffer,
     shellQuoteArg,
     normalizeToolsTerminalLines,
     summarizeChecks,

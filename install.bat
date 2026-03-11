@@ -7,31 +7,35 @@ echo        Cajal ICBM Installer (Windows)
 echo   ========================================
 echo.
 
-:: ── Check for winget ─────────────────────────────────────────────────────────
+:: ── Detect winget ────────────────────────────────────────────────────────────
+set "HAS_WINGET=0"
 where winget >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: winget is not available on this system.
-    echo        winget ships with Windows 10 ^(1709+^) and Windows 11.
-    echo        Install "App Installer" from the Microsoft Store, then re-run.
+if %errorlevel% equ 0 set "HAS_WINGET=1"
+
+if "!HAS_WINGET!"=="0" (
+    echo   winget not found — using direct download fallback.
     echo.
-    pause
-    exit /b 1
 )
 
 :: ── Install Git ──────────────────────────────────────────────────────────────
 where git >nul 2>&1
 if %errorlevel% neq 0 (
     echo Installing Git...
-    winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
+    if "!HAS_WINGET!"=="1" (
+        winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
+    ) else (
+        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe' -OutFile '%TEMP%\git-installer.exe'"
+        "%TEMP%\git-installer.exe" /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
+    )
     if !errorlevel! neq 0 (
         echo ERROR: Failed to install Git.
         pause
         exit /b 1
     )
-    echo   Git installed. You may need to close and reopen this window.
+    echo   Git installed.
     echo.
 
-    :: Refresh PATH so git is available immediately
+    :: Refresh PATH
     for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
     for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
     set "PATH=!SYS_PATH!;!USR_PATH!"
@@ -47,11 +51,16 @@ if %errorlevel% neq 0 (
     echo   Git already installed.
 )
 
-:: ── Install Node.js 20 ──────────────────────────────────────────────────────
+:: ── Install Node.js 20 ───────────────────────────────────────────────────────
 where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo Installing Node.js 20...
-    winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
+    if "!HAS_WINGET!"=="1" (
+        winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
+    ) else (
+        powershell -Command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.12.2/node-v20.12.2-x64.msi' -OutFile '%TEMP%\node-installer.msi'"
+        msiexec /i "%TEMP%\node-installer.msi" /qn /norestart
+    )
     if !errorlevel! neq 0 (
         echo ERROR: Failed to install Node.js.
         pause
@@ -73,32 +82,40 @@ if %errorlevel% neq 0 (
         exit /b 1
     )
 ) else (
-    for /f "tokens=1 delims=v." %%M in ('node --version') do set "NODE_MAJOR=%%M"
-    :: node --version returns "v20.x.x" — strip the v
     for /f "tokens=1 delims=." %%M in ('node -e "process.stdout.write(process.version.slice(1))"') do set "NODE_MAJOR=%%M"
     if !NODE_MAJOR! LSS 20 (
         echo   Node.js found but v20+ required. Upgrading...
-        winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
+        if "!HAS_WINGET!"=="1" (
+            winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
+        ) else (
+            powershell -Command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.12.2/node-v20.12.2-x64.msi' -OutFile '%TEMP%\node-installer.msi'"
+            msiexec /i "%TEMP%\node-installer.msi" /qn /norestart
+        )
     ) else (
         echo   Node.js already installed.
     )
 )
 
-:: ── Install Docker Desktop ───────────────────────────────────────────────────
+:: ── Install Docker ───────────────────────────────────────────────────────────
 where docker >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Installing Docker Desktop...
+    echo Installing Docker...
     echo   This may take a few minutes and require a restart.
     echo.
-    winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements --silent
+    if "!HAS_WINGET!"=="1" (
+        winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements --silent
+    ) else (
+        powershell -Command "Invoke-WebRequest -Uri 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -OutFile '%TEMP%\DockerDesktopInstaller.exe'"
+        "%TEMP%\DockerDesktopInstaller.exe" install --quiet --accept-license
+    )
     if !errorlevel! neq 0 (
-        echo ERROR: Failed to install Docker Desktop.
+        echo ERROR: Failed to install Docker.
         echo        You can install it manually from https://docker.com/get-docker
         pause
         exit /b 1
     )
     echo.
-    echo   Docker Desktop installed.
+    echo   Docker installed.
     echo.
     echo   IMPORTANT: You must restart your computer, then:
     echo     1. Open Docker Desktop and complete setup
@@ -153,7 +170,7 @@ if not exist .env (
     )
 )
 
-:: ── Auto-generate CAJAL_CONFIG_KEY if missing or default ─────────────────────
+:: ── Auto-generate CAJAL_CONFIG_KEY if missing ────────────────────────────────
 findstr /B "CAJAL_CONFIG_KEY=" .env >nul 2>&1
 if %errorlevel% neq 0 (
     for /f %%K in ('node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"') do set "NEW_KEY=%%K"

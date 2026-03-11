@@ -3879,24 +3879,24 @@ button.flow-btn:hover {
   flex-direction: column;
   gap: 0.2rem;
   padding: 0.5rem 0.65rem;
-  background: var(--bg2, #1a1a1a);
-  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
   border-radius: 4px;
   font-size: 0.78rem;
-  color: var(--fg2, #aaa);
+  color: var(--text);
 }
 .trap-receiver-info strong {
-  color: var(--fg, #eee);
+  color: var(--ok);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .trap-receiver-info code {
-  background: var(--bg3, #111);
+  background: var(--card);
   padding: 0.1em 0.35em;
   border-radius: 3px;
   font-family: monospace;
-  color: var(--accent, #7eb8f7);
+  color: var(--accent);
 }
 
 .editor-actions {

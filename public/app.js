@@ -16,6 +16,17 @@ const ssoConfigPanel = document.getElementById('ssoConfigPanel');
 const ssoConfigForm = document.getElementById('ssoConfigForm');
 const ssoConfigMsg = document.getElementById('ssoConfigMsg');
 const syncNowBtn = document.getElementById('syncNowBtn');
+const ldapConfigPanel = document.getElementById('ldapConfigPanel');
+const ldapConfigForm = document.getElementById('ldapConfigForm');
+const ldapConfigMsg = document.getElementById('ldapConfigMsg');
+const ldapStatusLine = document.getElementById('ldapStatusLine');
+const ldapTestBtn = document.getElementById('ldapTestBtn');
+const ldapTestDialog = document.getElementById('ldapTestDialog');
+const ldapTestSteps = document.getElementById('ldapTestSteps');
+const ldapTestUserList = document.getElementById('ldapTestUserList');
+const ldapTestUserTable = document.getElementById('ldapTestUserTable');
+const ldapTestApprove = document.getElementById('ldapTestApprove');
+const ldapTestClose = document.getElementById('ldapTestClose');
 const userAdminPanel = document.getElementById('userAdminPanel');
 const userList = document.getElementById('userList');
 const addUserForm = document.getElementById('addUserForm');
@@ -247,6 +258,8 @@ let authState = {
 };
 let managedUsers = [];
 let ssoConfigState = {};
+let ldapConfigState = {};
+let ldapTestPendingUsers = [];
 let runtimeConfigState = {};
 let sslConfigState = {};
 let locationSettingsState = {
@@ -1293,6 +1306,26 @@ function populateSsoForm(config = {}) {
   setValue('scope', config.scope);
 }
 
+function populateLdapForm(config = {}) {
+  if (!ldapConfigForm) return;
+  const setValue = (name, value) => {
+    const input = ldapConfigForm.querySelector(`[name="${name}"]`);
+    if (input) input.value = value ?? '';
+  };
+  setValue('serverUrl', config.serverUrl);
+  setValue('port', config.port || 389);
+  setValue('baseDn', config.baseDn);
+  setValue('adminGroup', config.adminGroup);
+  setValue('monitorGroup', config.monitorGroup);
+  setValue('bindDn', config.bindDn);
+  setValue('bindPassword', config.bindPassword || '');
+  if (ldapStatusLine) {
+    ldapStatusLine.textContent = config.serverUrl
+      ? `LDAP: ${config.serverUrl}:${config.port || 389}`
+      : 'LDAP: Not configured';
+  }
+}
+
 function populateRuntimeForm(config = {}) {
   if (!runtimeConfigForm) return;
   const fields = ['syslogUdpPort', 'syslogTcpPort', 'netflowPort', 'snmpPollIntervalMs', 'flowTimeoutMs', 'pingIntervalMs', 'globalDataRefreshMs', 'wanTestIntervalMs'];
@@ -1663,6 +1696,7 @@ function applyAuthUi() {
     ssoLoginBtn.textContent = authState.config?.enabled ? 'Login with Entra' : 'Local Admin Login';
   }
   if (ssoConfigPanel) ssoConfigPanel.hidden = !admin;
+  if (ldapConfigPanel) ldapConfigPanel.hidden = !admin;
   if (sslConfigPanel) sslConfigPanel.hidden = !admin;
   if (teamsConfigPanel) teamsConfigPanel.hidden = !admin;
   if (webhookRoutingPanel) webhookRoutingPanel.hidden = !admin;
@@ -2716,6 +2750,13 @@ async function loadSsoSettings() {
     ssoConfigState = cloneForUndo(config) || {};
     populateSsoForm(ssoConfigState);
   }, ssoConfigMsg);
+}
+
+async function loadLdapSettings() {
+  return loadAdminSettings('/api/settings/ldap', (config) => {
+    ldapConfigState = cloneForUndo(config) || {};
+    populateLdapForm(ldapConfigState);
+  }, ldapConfigMsg);
 }
 
 async function loadRuntimeSettings() {
@@ -4414,6 +4455,7 @@ function monitorEditor(site) {
         <button type="submit">Save ${protocolLabel(protocol)} Settings</button>
         <button type="button" class="monitor-diagnostic-btn ghost-btn">Run Diagnostics</button>
         ${isSnmp ? '<button type="button" class="snmp-test-btn ghost-btn">Test SNMP Now</button>' : ''}
+        ${isSnmp ? '<button type="button" class="snmp-oid-probe-btn ghost-btn">Probe OIDs</button>' : ''}
         ${isSyslog ? '<button type="button" class="syslog-test-btn ghost-btn">Test Syslog Now</button>' : ''}
         ${isNetflow ? '<button type="button" class="netflow-test-btn ghost-btn">Test NetFlow Now</button>' : ''}
         <button type="button" class="monitor-close-btn ghost-btn">Close</button>
@@ -4981,6 +5023,7 @@ async function loadDashboard(options = {}) {
 
 async function loadAdminSections() {
   await loadSsoSettings();
+  await loadLdapSettings();
   await loadRuntimeSettings();
   await loadWebhookRoutingSettings();
   await loadSslSettings();
@@ -5127,6 +5170,7 @@ settingsBtn?.addEventListener('click', () => {
     window.scrollTo(0, 0);
     loadManagedUsers().catch(() => {});
     loadSsoSettings().catch(() => {});
+    loadLdapSettings().catch(() => {});
     loadRuntimeSettings().catch(() => {});
     loadWebhookRoutingSettings().catch(() => {});
     loadSslSettings().catch(() => {});
@@ -6092,6 +6136,160 @@ ssoConfigForm?.addEventListener('submit', async (event) => {
   }
 });
 
+// ── LDAP Config ─────────────────────────────────────────────────────────────
+ldapConfigForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!canAdmin()) return;
+  const previousLdap = cloneForUndo(ldapConfigState) || {};
+  if (ldapConfigMsg) ldapConfigMsg.textContent = 'Saving LDAP config...';
+  const payload = Object.fromEntries(new FormData(ldapConfigForm).entries());
+  if (payload.port) payload.port = Number(payload.port) || 389;
+  try {
+    ldapConfigState = await getJson('/api/settings/ldap', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const undoPayload = {};
+    for (const key of ['serverUrl', 'port', 'baseDn', 'adminGroup', 'monitorGroup', 'bindDn', 'bindPassword']) {
+      if (typeof previousLdap[key] === 'string' || typeof previousLdap[key] === 'number') {
+        if (key === 'bindPassword' && previousLdap[key] === SSO_MASK) continue;
+        undoPayload[key] = previousLdap[key];
+      }
+    }
+    if (Object.keys(undoPayload).length) {
+      pushSettingsUndo('LDAP configuration', async () => {
+        await getJson('/api/settings/ldap', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(undoPayload)
+        });
+        await loadLdapSettings();
+      }, {
+        flashTargets: ['#ldapConfigPanel']
+      });
+    }
+    if (ldapConfigMsg) ldapConfigMsg.textContent = 'LDAP config saved.';
+    await loadLdapSettings();
+    showToast('Settings Saved');
+  } catch (err) {
+    if (ldapConfigMsg) ldapConfigMsg.textContent = err.message;
+  }
+});
+
+function renderLdapSteps(steps = []) {
+  if (!ldapTestSteps) return;
+  const icons = { ok: '+', fail: 'X', warn: '!', running: '~' };
+  ldapTestSteps.innerHTML = steps.map((s) =>
+    `<div class="ldap-step ldap-step-${escapeHtml(s.status)}">` +
+    `<span class="ldap-step-icon">[${icons[s.status] || '?'}]</span>` +
+    `<span class="ldap-step-name">${escapeHtml(s.name)}</span>` +
+    `<span class="ldap-step-detail">${escapeHtml(s.detail)}</span>` +
+    `</div>`
+  ).join('');
+  ldapTestSteps.scrollTop = ldapTestSteps.scrollHeight;
+}
+
+function renderLdapUserTable(users = []) {
+  if (!ldapTestUserTable || !ldapTestUserList) return;
+  if (!users.length) {
+    ldapTestUserList.hidden = true;
+    return;
+  }
+  ldapTestUserList.hidden = false;
+  const header = '<div class="ldap-user-row"><span>Username</span><span>Display Name</span><span>Role</span></div>';
+  const rows = users.map((u) =>
+    `<div class="ldap-user-row">` +
+    `<span>${escapeHtml(u.sAMAccountName || '')}</span>` +
+    `<span>${escapeHtml(u.displayName || '')}</span>` +
+    `<span class="ldap-user-role-${escapeHtml(u.role || 'monitor')}">${escapeHtml(u.role || 'monitor')}</span>` +
+    `</div>`
+  ).join('');
+  ldapTestUserTable.innerHTML = header + rows;
+}
+
+ldapTestBtn?.addEventListener('click', async () => {
+  if (!canAdmin()) return;
+  ldapTestPendingUsers = [];
+  if (ldapTestSteps) ldapTestSteps.innerHTML = '';
+  if (ldapTestUserList) ldapTestUserList.hidden = true;
+  if (ldapTestApprove) ldapTestApprove.hidden = true;
+
+  if (typeof ldapTestDialog?.showModal === 'function') {
+    ldapTestDialog.showModal();
+  }
+
+  // Show running state
+  renderLdapSteps([{ name: 'Initializing', status: 'running', detail: 'Sending test request...' }]);
+
+  // Get current form values to send as test params
+  const payload = Object.fromEntries(new FormData(ldapConfigForm).entries());
+  if (payload.port) payload.port = Number(payload.port) || 389;
+
+  try {
+    const result = await getJson('/api/settings/ldap/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    renderLdapSteps(result.steps || []);
+    ldapTestPendingUsers = result.users || [];
+    renderLdapUserTable(ldapTestPendingUsers);
+
+    if (ldapTestApprove && ldapTestPendingUsers.length > 0) {
+      ldapTestApprove.hidden = false;
+      ldapTestApprove.textContent = `Approve Import (${ldapTestPendingUsers.length} users)`;
+    }
+  } catch (err) {
+    renderLdapSteps([{ name: 'Error', status: 'fail', detail: err.message }]);
+  }
+});
+
+ldapTestApprove?.addEventListener('click', async () => {
+  if (!ldapTestPendingUsers.length) return;
+  ldapTestApprove.disabled = true;
+  ldapTestApprove.textContent = 'Importing...';
+
+  try {
+    const result = await getJson('/api/settings/ldap/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ users: ldapTestPendingUsers })
+    });
+
+    const summary = [];
+    if (result.created?.length) summary.push(`${result.created.length} created`);
+    if (result.updated?.length) summary.push(`${result.updated.length} updated`);
+    if (result.skipped?.length) summary.push(`${result.skipped.length} skipped`);
+
+    renderLdapSteps([
+      ...(ldapTestSteps ? Array.from(ldapTestSteps.querySelectorAll('.ldap-step')).map((el) => ({
+        name: el.querySelector('.ldap-step-name')?.textContent || '',
+        status: (el.className.match(/ldap-step-(\w+)/) || [])[1] || 'ok',
+        detail: el.querySelector('.ldap-step-detail')?.textContent || ''
+      })) : []),
+      { name: 'Import Complete', status: 'ok', detail: summary.join(', ') || 'No changes' }
+    ]);
+
+    ldapTestApprove.hidden = true;
+    ldapTestPendingUsers = [];
+    showToast(`LDAP import: ${summary.join(', ')}`);
+    await loadManagedUsers();
+  } catch (err) {
+    ldapTestApprove.textContent = `Approve Import (${ldapTestPendingUsers.length} users)`;
+    renderLdapSteps([
+      { name: 'Import Failed', status: 'fail', detail: err.message }
+    ]);
+  } finally {
+    ldapTestApprove.disabled = false;
+  }
+});
+
+ldapTestClose?.addEventListener('click', () => {
+  ldapTestDialog?.close();
+});
+
 resetOwnTotpBtn?.addEventListener('click', async () => {
   if (canAdmin()) return;
   if (mySecurityMsg) mySecurityMsg.textContent = 'Resetting your TOTP...';
@@ -6675,6 +6873,45 @@ document.addEventListener('click', (event) => {
       })
       .finally(() => {
         snmpTestButton.disabled = false;
+      });
+    return;
+  }
+
+  const snmpOidProbeButton = event.target.closest('.snmp-oid-probe-btn');
+  if (snmpOidProbeButton) {
+    if (!canAdmin()) return;
+    const editor = snmpOidProbeButton.closest('.monitor-editor');
+    if (!editor) return;
+    const msg = editor.querySelector('.monitor-save-msg');
+    const formData = new FormData(editor);
+    const siteId = String(formData.get('siteId') || '');
+    const protocol = String(formData.get('monitorProtocol') || '');
+    if (!siteId || protocol !== 'snmp') return;
+    const config = {};
+    for (const [key, value] of formData.entries()) {
+      if (key === 'siteId' || key === 'monitorProtocol' || key === 'enabled') continue;
+      config[key] = String(value).trim();
+    }
+    snmpOidProbeButton.disabled = true;
+    if (msg) msg.textContent = 'Probing OIDs...';
+    getJson(`/api/sites/${encodeURIComponent(siteId)}/monitors/snmp/oid-probe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config })
+    })
+      .then((result) => {
+        const lines = (result.results || []).map((r) => {
+          const icon = r.status === 'ok' ? '[OK]' : r.status === 'empty' ? '[EMPTY]' : '[ERR]';
+          return `${icon} ${r.label} (${r.oid}) — ${r.rows} rows in ${r.durationMs}ms${r.sample ? ': ' + r.sample.split('\n')[0].slice(0, 80) : ''}`;
+        });
+        if (msg) msg.textContent = lines.join(' | ');
+        console.log('[SNMP OID Probe]', result.results);
+      })
+      .catch((err) => {
+        if (msg) msg.textContent = `OID probe failed: ${err.message}`;
+      })
+      .finally(() => {
+        snmpOidProbeButton.disabled = false;
       });
     return;
   }

@@ -244,6 +244,7 @@ let autoRefreshTimer = null;
 let serverClockOffsetMs = 0;
 let globalClockTimeZone = 'UTC';
 let globalClockHourMode = '24h';
+let snmpTrapPort = 1162;
 let authState = {
   user: { authenticated: false, displayName: 'Guest', email: '', role: 'monitor' },
   config: { enabled: false },
@@ -4380,6 +4381,10 @@ function monitorFields(protocol, config) {
       <label>Auth Password
         <input name="authPassword" type="password" value="${escapeHtml(config.authPassword || '')}" />
       </label>
+      <div class="trap-receiver-info">
+        <strong>SNMP Trap Receiver</strong>
+        <span>Point your device's trap destination to <code>${escapeHtml(window.location.hostname)}:${snmpTrapPort}</code> — traps appear in the Event Viewer immediately.</span>
+      </div>
     `;
   }
 
@@ -5052,6 +5057,9 @@ async function initialize() {
       const health = await getJson('/api/health');
       if (health?.version) {
         updateTopbarVersion(health.version);
+      }
+      if (health?.snmpTrapPort) {
+        snmpTrapPort = health.snmpTrapPort;
       }
     } catch {
       // Version display degrades gracefully

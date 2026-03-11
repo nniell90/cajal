@@ -815,3 +815,76 @@ test('install.bat creates .db_password file from env', () => {
   const script = readFile('install.bat');
   assert.ok(script.includes('.db_password'), 'install.bat must reference .db_password file');
 });
+
+// ── LDAP module tests ─────────────────────────────────────────────────────────
+
+test('LDAP settings HTML section exists in security tab', () => {
+  const html = readFile('public/index.html');
+  assert.ok(html.includes('id="ldapConfigPanel"'), 'LDAP config panel must exist');
+  assert.ok(html.includes('id="ldapConfigForm"'), 'LDAP config form must exist');
+  assert.ok(html.includes('id="ldapTestBtn"'), 'LDAP test button must exist');
+  assert.ok(html.includes('id="ldapTestDialog"'), 'LDAP test dialog must exist');
+  assert.ok(html.includes('name="serverUrl"'), 'DC server URL input must exist');
+  assert.ok(html.includes('name="adminGroup"'), 'admin group input must exist');
+  assert.ok(html.includes('name="monitorGroup"'), 'monitor group input must exist');
+  assert.ok(html.includes('name="bindDn"'), 'bind DN input must exist');
+  assert.ok(html.includes('name="bindPassword"'), 'bind password input must exist');
+});
+
+test('LDAP settings CSS classes exist', () => {
+  const css = readFile('public/styles.css');
+  assert.ok(css.includes('.ldap-config-form'), 'ldap-config-form class must exist');
+  assert.ok(css.includes('.ldap-test-steps'), 'ldap-test-steps class must exist');
+  assert.ok(css.includes('.ldap-step-ok'), 'ldap-step-ok class must exist');
+  assert.ok(css.includes('.ldap-step-fail'), 'ldap-step-fail class must exist');
+  assert.ok(css.includes('.ldap-user-row'), 'ldap-user-row class must exist');
+});
+
+test('LDAP frontend JS has form handler and test button', () => {
+  const js = readFile('public/app.js');
+  assert.ok(js.includes("ldapConfigForm?.addEventListener('submit'"), 'LDAP form submit handler must exist');
+  assert.ok(js.includes("ldapTestBtn?.addEventListener('click'"), 'LDAP test button handler must exist');
+  assert.ok(js.includes("ldapTestApprove?.addEventListener('click'"), 'LDAP approve handler must exist');
+  assert.ok(js.includes('loadLdapSettings'), 'loadLdapSettings function must exist');
+  assert.ok(js.includes('populateLdapForm'), 'populateLdapForm function must exist');
+});
+
+test('LDAP backend settings module has config persistence', () => {
+  const settings = readFile('lib/settings.js');
+  assert.ok(settings.includes('loadLdapConfig'), 'loadLdapConfig must be exported');
+  assert.ok(settings.includes('persistLdapConfig'), 'persistLdapConfig must be exported');
+  assert.ok(settings.includes('ldapConfigForClient'), 'ldapConfigForClient must be exported');
+  assert.ok(settings.includes('LDAP_FILE'), 'LDAP_FILE constant must be imported');
+});
+
+test('LDAP routes exist in settings handler', () => {
+  const routes = readFile('lib/routes/settings.js');
+  assert.ok(routes.includes("/api/settings/ldap'"), 'GET/PATCH /api/settings/ldap route must exist');
+  assert.ok(routes.includes("/api/settings/ldap/test'"), 'POST /api/settings/ldap/test route must exist');
+  assert.ok(routes.includes("/api/settings/ldap/import'"), 'POST /api/settings/ldap/import route must exist');
+});
+
+test('LDAP module exists with test connection function', () => {
+  const ldapModule = readFile('lib/ldap.js');
+  assert.ok(ldapModule.includes('testLdapConnection'), 'testLdapConnection must be exported');
+  assert.ok(ldapModule.includes('tcpPing'), 'tcpPing must exist');
+  assert.ok(ldapModule.includes('ldapBind'), 'ldapBind function must exist');
+  assert.ok(ldapModule.includes('resolveGroupMembers'), 'resolveGroupMembers must exist');
+});
+
+test('LDAP config loaded at server startup', () => {
+  const server = readFile('server.js');
+  assert.ok(server.includes('loadLdapConfig'), 'server must load LDAP config at startup');
+  assert.ok(server.includes('shared.ldapRuntimeConfig'), 'server must set shared.ldapRuntimeConfig');
+});
+
+test('LDAP shared state has getter/setter', () => {
+  const shared = readFile('lib/shared.js');
+  assert.ok(shared.includes('ldapRuntimeConfig'), 'shared module must have ldapRuntimeConfig');
+});
+
+test('LDAP file tracked in constants', () => {
+  const constants = readFile('lib/constants.js');
+  assert.ok(constants.includes('LDAP_FILE'), 'LDAP_FILE must be defined in constants');
+  assert.ok(constants.includes("'ldap'"), 'ldap must be in CONFIG_INTEGRITY_KEYS');
+});

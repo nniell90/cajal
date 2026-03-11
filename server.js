@@ -476,6 +476,7 @@ const {
   sanitizeBackupMeta,
   loadBackupMeta,
   persistBackupMeta,
+  loadLdapConfig,
 } = require('./lib/settings');
 
 const {
@@ -643,6 +644,7 @@ const defaultUsers = [
 ];
 
 if (!shared.ssoRuntimeConfig) shared.ssoRuntimeConfig = { ...defaultSsoConfig };
+if (!shared.ldapRuntimeConfig) shared.ldapRuntimeConfig = { serverUrl: '', port: 389, baseDn: '', adminGroup: '', monitorGroup: '', bindDn: '', bindPassword: '' };
 if (!shared.runtimeSettings) shared.runtimeSettings = { ...defaultRuntimeSettings };
 if (!shared.sslRuntimeConfig) shared.sslRuntimeConfig = { ...defaultSslSettings };
 if (!shared.locationSettings) shared.locationSettings = { ...defaultLocationSettings };
@@ -761,6 +763,7 @@ async function loadState() {
   const usersChanged = ensureDefaultLocalUsers(users);
   if (usersChanged) await persistUsers(users);
   shared.ssoRuntimeConfig = await loadSsoConfig();
+  shared.ldapRuntimeConfig = await loadLdapConfig();
   shared.runtimeSettings = await loadRuntimeSettings();
   const apiTokenSettings = await loadApiTokenSettings();
   shared.sslRuntimeConfig = await loadSslSettings();

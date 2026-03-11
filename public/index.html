@@ -177,6 +177,26 @@
             <p id="ssoConfigMsg"></p>
           </div>
         </section>
+        <section id="ldapConfigPanel" class="ldap-config-panel settings-section is-collapsed" hidden>
+          <button type="button" class="settings-toggle"><span>LDAP / Active Directory</span></button>
+          <div class="settings-content">
+            <p id="ldapStatusLine">LDAP: Not configured</p>
+            <form id="ldapConfigForm" class="ldap-config-form">
+              <label>Domain Controller <input name="serverUrl" placeholder="192.168.1.10 or dc.example.com" /></label>
+              <label>Port <input name="port" type="number" placeholder="389" value="389" /></label>
+              <label>Base DN <input name="baseDn" placeholder="DC=example,DC=com" /></label>
+              <label>Admin Group <input name="adminGroup" placeholder="Cajal-Admins" /></label>
+              <label>Monitor Group <input name="monitorGroup" placeholder="Cajal-Monitors" /></label>
+              <label>Service Account DN <input name="bindDn" placeholder="CN=svc-cajal,OU=Service,DC=example,DC=com" /></label>
+              <label>Service Account Password <input name="bindPassword" type="password" placeholder="Service account password" /></label>
+              <div class="ldap-form-actions">
+                <button type="submit">Save LDAP Config</button>
+                <button id="ldapTestBtn" type="button" class="ghost-btn">Test &amp; Sync</button>
+              </div>
+            </form>
+            <p id="ldapConfigMsg"></p>
+          </div>
+        </section>
         <section id="sslConfigPanel" class="settings-subpanel settings-section is-collapsed" hidden>
           <button type="button" class="settings-toggle"><span>SSL Certificate</span></button>
           <div class="settings-content">
@@ -584,6 +604,21 @@
         <div class="local-auth-actions">
           <button id="confirmActionConfirm" type="submit" class="meta-delete">Confirm</button>
           <button id="confirmActionCancel" type="button" class="ghost-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="ldapTestDialog" class="local-auth-dialog ldap-test-dialog">
+      <form method="dialog" class="local-auth-form">
+        <h3>LDAP Connection Test</h3>
+        <div id="ldapTestSteps" class="ldap-test-steps"></div>
+        <div id="ldapTestUserList" class="ldap-test-user-list" hidden>
+          <h4>Users to Import</h4>
+          <div id="ldapTestUserTable" class="ldap-test-user-table"></div>
+        </div>
+        <div class="local-auth-actions">
+          <button id="ldapTestApprove" type="button" hidden>Approve Import</button>
+          <button id="ldapTestClose" type="button" class="ghost-btn">Close</button>
         </div>
       </form>
     </dialog>

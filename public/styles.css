@@ -743,6 +743,60 @@ body {
   padding: 0.2rem 0.6rem;
 }
 
+.ldap-config-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.22rem;
+}
+.ldap-config-form label:nth-child(7) { grid-column: 1 / -1; }
+.ldap-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+}
+.ldap-form-actions button { padding: 0.2rem 0.6rem; }
+.ldap-test-dialog .local-auth-form { max-width: min(560px, 92vw); }
+.ldap-test-steps {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.64rem;
+  line-height: 1.5;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-darker, #0a0a0a);
+  padding: 0.4rem 0.5rem;
+  border-radius: 2px;
+  margin-bottom: 0.4rem;
+}
+.ldap-step { display: flex; gap: 0.35rem; align-items: baseline; padding: 0.12rem 0; }
+.ldap-step-icon { flex-shrink: 0; width: 1.2em; text-align: center; }
+.ldap-step-ok .ldap-step-icon { color: var(--green, #4ade80); }
+.ldap-step-fail .ldap-step-icon { color: var(--red, #f87171); }
+.ldap-step-warn .ldap-step-icon { color: var(--yellow, #facc15); }
+.ldap-step-running .ldap-step-icon { color: var(--cyan, #22d3ee); }
+.ldap-step-name { color: var(--text-dim, #999); min-width: 9em; }
+.ldap-step-detail { color: var(--text-primary, #e0e0e0); }
+.ldap-test-user-list { margin-top: 0.3rem; }
+.ldap-test-user-list h4 { margin: 0 0 0.25rem; font-size: 0.68rem; }
+.ldap-test-user-table {
+  font-size: 0.62rem;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-darker, #0a0a0a);
+  padding: 0.3rem 0.4rem;
+  border-radius: 2px;
+}
+.ldap-user-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 5em;
+  gap: 0.3rem;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid var(--border-color, #222);
+}
+.ldap-user-row:first-child { font-weight: bold; color: var(--text-dim, #999); }
+.ldap-user-role-admin { color: var(--orange, #fb923c); }
+.ldap-user-role-monitor { color: var(--cyan, #22d3ee); }
+
 .settings-compact-form {
   display: grid;
   gap: 0.22rem;
@@ -4751,6 +4805,7 @@ select {
   }
 
   .sso-config-form,
+  .ldap-config-form,
   .add-user-form,
   .settings-ports-form,
   .api-token-form,

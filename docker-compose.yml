@@ -30,6 +30,7 @@ services:
       - "0.0.0.0:${CAJAL_SYSLOG_TCP_PORT:-5514}:${CAJAL_SYSLOG_TCP_PORT:-5514}/tcp"
       - "0.0.0.0:${CAJAL_SYSLOG_UDP_PORT:-5514}:${CAJAL_SYSLOG_UDP_PORT:-5514}/udp"
       - "0.0.0.0:${CAJAL_NETFLOW_PORT:-2055}:${CAJAL_NETFLOW_PORT:-2055}/udp"
+      - "0.0.0.0:${CAJAL_SNMP_TRAP_PORT:-1162}:${CAJAL_SNMP_TRAP_PORT:-1162}/udp"
     env_file: .env
     secrets:
       - db_password

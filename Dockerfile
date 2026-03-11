@@ -20,7 +20,7 @@ RUN npm install --omit=dev
 
 COPY . .
 
-EXPOSE 4000 5514/tcp 5514/udp 2055/udp
+EXPOSE 4000 5514/tcp 5514/udp 2055/udp 1162/udp
 
 RUN chown -R node:node /app
 USER node

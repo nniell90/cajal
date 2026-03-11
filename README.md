@@ -12,6 +12,25 @@ This README is the canonical operator/developer guide for running and extending 
 
 ## Patch Notes {#patch-notes}
 
+- Version 2.1.5:
+  - **SNMP trap receiver** — Cajal now listens for inbound SNMP traps (UDP port 1162 by default). Traps are matched to sites by source IP and appear immediately in the Event Viewer with trap type, community string, uptime, and all varbinds. linkDown/coldStart/authenticationFailure events are flagged as alerts (class 402); linkUp/warmStart are informational (class 322). Configure your device to send traps to the Cajal server IP on port 1162.
+  - **Noisy SNMP event logging** — SNMP poll events fire every cycle (no throttle) with full detail: interface count, up/down summary, top bandwidth interface, response time
+  - **LDAP authentication** — LDAP backend support for directory-based login
+  - **Settings UI enhancements** — additional settings sections and refined UI
+
+- Version 2.1.4:
+  - **First-time setup auto-prompt** — login page automatically opens the account creation dialog when no admin passwords are configured (fresh installs and factory resets)
+
+- Version 2.1.3:
+  - **SNMP OID probe** — new "Probe OIDs" button in SNMP monitor editor discovers which MIB tables the device supports (System Group, ifTable, ifXTable, IP Address Table, Meraki Enterprise MIB, hrSystem, TCP/UDP Stats)
+  - **Meraki SNMP compatibility** — fixed "No Such Object" handling for devices that don't support sysUpTime; fixed bare Timeticks format (`Timeticks: 12345`)
+  - **`formatSysUpTimeTicks` fix** — function now correctly imported and exported across modules
+
+- Version 2.1.0 – 2.1.2:
+  - LAN Link Monitor, SNMP interface bandwidth tracking (requires 2+ poll cycles for delta)
+  - SNMP interface walk: ifTable + ifXTable, bandwidth delta computation per interface
+  - LAN reachability: port binding changed to `0.0.0.0` for LAN access
+
 - Version 2.0.9:
   - **Settings UI polish** — flush-aligned buttons, compact accordion sections, consistent font sizing
   - **Install reliability** — auto-create `.db_password` secret file in docker-reload.sh and install.bat
@@ -354,7 +373,7 @@ This starts four containers:
 | Container | Purpose | Networking |
 |---|---|---|
 | `cajal-postgres` | PostgreSQL data store | Bridge, localhost:5432 |
-| `cajal-app` | Application (port 4000, syslog 5514, NetFlow 2055) | **Host** (preserves real source IPs) |
+| `cajal-app` | Application (port 4000, syslog 5514, NetFlow 2055, SNMP traps 1162) | Bridge (explicit port bindings) |
 | `cajal-socket-proxy` | Docker socket whitelist proxy | Bridge, localhost:2375 |
 | `cajal-watchtower` | Auto-update via HTTP API | Bridge, localhost:8080 |
 
@@ -409,6 +428,7 @@ docker compose down -v
 - `CAJAL_SYSLOG_UDP_PORT` default `5514`
 - `CAJAL_SYSLOG_TCP_PORT` default `5514`
 - `CAJAL_NETFLOW_PORT` default `2055`
+- `CAJAL_SNMP_TRAP_PORT` default `1162` — UDP port for inbound SNMP traps from devices
 - `CAJAL_FLOW_TIMEOUT_MS` default `120000`
 - `CAJAL_SYSLOG_FLOW_TIMEOUT_MIN_MS` default `900000` (15m minimum stale window for SYSLOG flow state)
 - `CAJAL_NETFLOW_FLOW_TIMEOUT_MIN_MS` default `900000` (15m minimum stale window for NETFLOW flow state)
@@ -751,7 +771,17 @@ If all incoming traffic shows a source IP like `172.17.0.1` instead of the real 
   - Confirm service state: `sudo systemctl status cajal-agent --no-pager`
   - Confirm recent logs: `sudo journalctl -u cajal-agent -n 120 --no-pager`
 
-### 9.11 Syslog or NetFlow shows offline while traffic still works
+### 9.11 SNMP traps not appearing in Event Viewer
+
+- Confirm your device is configured to send traps to the Cajal server IP on UDP port `1162` (default)
+- Confirm the SNMP community string matches what's configured on the device (community is logged but not used for filtering — all traps are accepted)
+- Verify the Cajal host firewall allows inbound UDP 1162: `sudo ufw allow 1162/udp`
+- Verify the port is open with `tcpdump -i any -n udp port 1162` on the server while triggering a trap (e.g., toggle an interface on the device)
+- Confirm the trap source IP matches the `Target Host/IP` in the site's SNMP monitor config — if it doesn't match, the trap still appears in Event Viewer but without site association
+- Check Settings → Diagnostics Console and filter by source `snmp` to see trap receiver startup and individual trap entries
+- For Meraki: Dashboard → Network-wide → General → Reporting → SNMP, set Trap Receiver to `<cajal-server-ip>:1162`
+
+### 9.12 Syslog or NetFlow shows offline while traffic still works
 
 - Cajal now uses protocol-aware stale windows to reduce false offline toggles for bursty traffic.
 - Defaults:

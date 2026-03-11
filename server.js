@@ -38,6 +38,7 @@ const {
   SYSLOG_UDP_PORT,
   SYSLOG_TCP_PORT,
   NETFLOW_PORT,
+  SNMP_TRAP_PORT,
   FLOW_TIMEOUT_MS,
   SYSLOG_FLOW_TIMEOUT_MIN_MS,
   NETFLOW_FLOW_TIMEOUT_MIN_MS,
@@ -624,6 +625,7 @@ const {
   startCollectorWanPublicIpPoller,
   startWanTestPoller,
   startSnmpPoller,
+  startSnmpTrapReceiver,
 } = require('./lib/monitoring');
 
 const { createHttpHandler } = require('./lib/router');
@@ -982,6 +984,7 @@ async function main() {
   startSyslogCollectors(state);
   startNetflowCollector(state);
   startSnmpPoller(state);
+  startSnmpTrapReceiver(state);
   startPingPoller(state);
   startPublicServicePoller(state);
   startLocationPingMonitorPoller(state);
@@ -994,7 +997,7 @@ async function main() {
     actor: 'cajal',
     action: 'startup_collectors',
     message: 'Telemetry collectors started',
-    detail: `storage=${shared.storageBackendActive} syslog=${SYSLOG_UDP_PORT}/${SYSLOG_TCP_PORT} netflow=${NETFLOW_PORT} snmpPollMs=${SNMP_POLL_INTERVAL_MS}`
+    detail: `storage=${shared.storageBackendActive} syslog=${SYSLOG_UDP_PORT}/${SYSLOG_TCP_PORT} netflow=${NETFLOW_PORT} snmpPollMs=${SNMP_POLL_INTERVAL_MS} snmpTrapPort=${SNMP_TRAP_PORT}`
   });
 
   setInterval(() => {

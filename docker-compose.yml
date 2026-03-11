@@ -26,7 +26,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:${PORT:-4000}:${PORT:-4000}"
+      - "0.0.0.0:${PORT:-4000}:${PORT:-4000}"
       - "0.0.0.0:${CAJAL_SYSLOG_TCP_PORT:-5514}:${CAJAL_SYSLOG_TCP_PORT:-5514}/tcp"
       - "0.0.0.0:${CAJAL_SYSLOG_UDP_PORT:-5514}:${CAJAL_SYSLOG_UDP_PORT:-5514}/udp"
       - "0.0.0.0:${CAJAL_NETFLOW_PORT:-2055}:${CAJAL_NETFLOW_PORT:-2055}/udp"

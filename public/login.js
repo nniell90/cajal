@@ -19,6 +19,10 @@ const loginVersionBadge = document.getElementById('loginVersionBadge');
 
 fetch('/api/health').then(r => r.json()).then(d => {
   if (loginVersionBadge && d.version) loginVersionBadge.textContent = 'VERSION: ' + d.version;
+  if (d.setupRequired) {
+    openRegisterDialog('admin');
+    if (registerMsg) registerMsg.textContent = 'No accounts have been configured. Enter your username to begin setup.';
+  }
 }).catch(() => {});
 
 let registerSetupToken = '';

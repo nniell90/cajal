@@ -17,6 +17,17 @@ if "!HAS_WINGET!"=="0" (
     echo.
 )
 
+:: ── Download helper (curl preferred, bitsadmin fallback) ─────────────────────
+:: Usage: call :download <url> <outfile>
+goto :after_download_fn
+:download
+    curl -L --silent --show-error -o "%~2" "%~1" >nul 2>&1
+    if !errorlevel! neq 0 (
+        bitsadmin /transfer cajal_dl /download /priority normal "%~1" "%~2" >nul 2>&1
+    )
+    exit /b !errorlevel!
+:after_download_fn
+
 :: ── Install Git ──────────────────────────────────────────────────────────────
 where git >nul 2>&1
 if %errorlevel% neq 0 (
@@ -24,7 +35,7 @@ if %errorlevel% neq 0 (
     if "!HAS_WINGET!"=="1" (
         winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
     ) else (
-        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe' -OutFile '%TEMP%\git-installer.exe'"
+        call :download "https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe" "%TEMP%\git-installer.exe"
         "%TEMP%\git-installer.exe" /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
     )
     if !errorlevel! neq 0 (
@@ -58,7 +69,7 @@ if %errorlevel% neq 0 (
     if "!HAS_WINGET!"=="1" (
         winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
     ) else (
-        powershell -Command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.12.2/node-v20.12.2-x64.msi' -OutFile '%TEMP%\node-installer.msi'"
+        call :download "https://nodejs.org/dist/v20.12.2/node-v20.12.2-x64.msi" "%TEMP%\node-installer.msi"
         msiexec /i "%TEMP%\node-installer.msi" /qn /norestart
     )
     if !errorlevel! neq 0 (
@@ -88,7 +99,7 @@ if %errorlevel% neq 0 (
         if "!HAS_WINGET!"=="1" (
             winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
         ) else (
-            powershell -Command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.12.2/node-v20.12.2-x64.msi' -OutFile '%TEMP%\node-installer.msi'"
+            call :download "https://nodejs.org/dist/v20.12.2/node-v20.12.2-x64.msi" "%TEMP%\node-installer.msi"
             msiexec /i "%TEMP%\node-installer.msi" /qn /norestart
         )
     ) else (
@@ -105,7 +116,7 @@ if %errorlevel% neq 0 (
     if "!HAS_WINGET!"=="1" (
         winget install --id Docker.DockerDesktop -e --accept-source-agreements --accept-package-agreements --silent
     ) else (
-        powershell -Command "Invoke-WebRequest -Uri 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -OutFile '%TEMP%\DockerDesktopInstaller.exe'"
+        call :download "https://desktop.docker.com/win/main/amd64/Docker Desktop Installer.exe" "%TEMP%\DockerDesktopInstaller.exe"
         "%TEMP%\DockerDesktopInstaller.exe" install --quiet --accept-license
     )
     if !errorlevel! neq 0 (

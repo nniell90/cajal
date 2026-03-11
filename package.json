@@ -1,6 +1,6 @@
 {
   "name": "cajal",
-  "version": "2.0.9",
+  "version": "2.1.0",
   "license": "MIT",
   "description": "Cajal ICBM web-based connectivity and bandwidth monitor",
   "main": "server.js",
@@ -19,6 +19,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "ldapjs": "^3.0.7",
     "pg": "^8.13.3",
     "qrcode": "^1.5.4"
   }

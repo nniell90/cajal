@@ -7,6 +7,11 @@ echo        Cajal ICBM Installer (Windows)
 echo   ========================================
 echo.
 
+:: ── Refresh PATH from registry (picks up previously installed tools) ─────────
+for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
+if defined SYS_PATH set "PATH=!SYS_PATH!;!USR_PATH!"
+
 :: ── Detect winget ────────────────────────────────────────────────────────────
 set "HAS_WINGET=0"
 where winget >nul 2>&1

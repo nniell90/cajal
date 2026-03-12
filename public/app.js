@@ -1768,7 +1768,6 @@ function formatNetflowRate(mbpsValue) {
 function formatNetflowLastError(errorValue) {
   const text = String(errorValue || '').trim();
   if (!text) return 'none';
-  if (/^no usable records\b/i.test(text)) return 'none';
   return text;
 }
 
@@ -3746,16 +3745,20 @@ function flowBadge(site, protocol) {
   `;
 }
 
-function protocolFlowIndicator(site, protocol) {
+function protocolFlowIndicator(site, protocol, metrics) {
   const enabled = Boolean(site?.monitorConfig?.[protocol]?.enabled);
   const flowing = Boolean(site?.telemetry?.[protocol]);
-  if (!enabled) {
-    return { chipClass: 'disabled', label: 'DISABLED' };
+  if (!enabled) return { chipClass: 'disabled', label: 'DISABLED' };
+  if (!flowing) return { chipClass: 'down', label: 'DOWN' };
+  if (protocol === 'snmp') {
+    const ifCount = Number(metrics?.snmp?.interfaceCount ?? -1);
+    if (ifCount === 0) return { chipClass: 'stale', label: 'NO IFACES' };
   }
-  if (flowing) {
-    return { chipClass: 'live', label: 'LIVE' };
+  if (protocol === 'netflow') {
+    const templateCount = Number(metrics?.netflow?.templateCount ?? -1);
+    if (templateCount === 0) return { chipClass: 'stale', label: 'NO TEMPLATE' };
   }
-  return { chipClass: 'down', label: 'DOWN' };
+  return { chipClass: 'live', label: 'LIVE' };
 }
 
 function heartbeatFlowIndicator(site) {
@@ -4493,9 +4496,9 @@ function siteTile(site) {
   const uptimePoints = buildUptimeSeriesFromSamples(metrics.uptimeSamples, uptimeScale, fallbackUptime);
   const fallbackUptimeSecondary = Array.isArray(metrics.uptime14dSecondary) && metrics.uptime14dSecondary.length ? metrics.uptime14dSecondary : fallbackUptime;
   const uptimePointsSecondary = buildUptimeSeriesFromSamples(metrics.uptimeSamplesSecondary, uptimeScale, fallbackUptimeSecondary);
-  const snmpIndicator = protocolFlowIndicator(site, 'snmp');
-  const syslogIndicator = protocolFlowIndicator(site, 'syslog');
-  const netflowIndicator = protocolFlowIndicator(site, 'netflow');
+  const snmpIndicator = protocolFlowIndicator(site, 'snmp', metrics);
+  const syslogIndicator = protocolFlowIndicator(site, 'syslog', metrics);
+  const netflowIndicator = protocolFlowIndicator(site, 'netflow', metrics);
   const heartbeatIndicator = heartbeatFlowIndicator(site);
   const syslogViewActive = activeEditor?.siteId === site.id && activeEditor?.protocol === 'syslog';
   const snmpViewActive = activeEditor?.siteId === site.id && activeEditor?.protocol === 'snmp';
@@ -4819,6 +4822,7 @@ function siteTile(site) {
           <p>SNMP Version: <strong>${escapeHtml(site.monitorConfig?.snmp?.version || 'N/A')}</strong></p>
           <p>Uptime: <strong>${escapeHtml(metrics.snmp?.uptime || 'Unknown')}</strong></p>
           <p>Interface Poll: <strong>${escapeHtml(metrics.snmp?.lastPoll || 'N/A')}</strong></p>
+          <p>Interfaces: <strong>${metrics.snmp?.interfaceCount !== undefined ? escapeHtml(String(metrics.snmp.interfaceCount)) : 'N/A'}${Number(metrics.snmp?.interfaceCount) === 0 ? ' — IF-MIB inaccessible' : ''}</strong></p>
           <p>SNMP Success/Fail: <strong>${escapeHtml(String(metrics.snmp?.successCount || 0))}/${escapeHtml(String(metrics.snmp?.failureCount || 0))}</strong></p>
           <p>SNMP Last Error: <strong>${escapeHtml(metrics.snmp?.lastError || 'none')}</strong></p>
           ${allowManage
@@ -4842,6 +4846,7 @@ function siteTile(site) {
             <span class="signal-flow-chip metric-head-flow ${escapeHtml(netflowIndicator.chipClass)}">${escapeHtml(netflowIndicator.label)}</span>
           </h4>
           <ul class="metric-list netflow-user-list">${topUsers(metrics.netflow?.topTalkers)}</ul>
+          <p>Templates: <strong>${metrics.netflow?.templateCount !== undefined ? escapeHtml(String(metrics.netflow.templateCount)) : 'N/A'}${Number(metrics.netflow?.templateCount) === 0 ? ' — no templates yet' : ''}</strong></p>
           <p>NetFlow Last Error: <strong>${escapeHtml(formatNetflowLastError(metrics.netflow?.lastError))}</strong></p>
           <div class="netflow-troublemakers-row">
             <button type="button" class="netflow-troublemakers-btn" data-site-id="${escapeHtml(site.id)}">Trouble Makers</button>

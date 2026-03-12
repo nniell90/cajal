@@ -184,11 +184,14 @@
             <form id="ldapConfigForm" class="ldap-config-form">
               <label>Domain Controller <input name="serverUrl" placeholder="192.168.1.10 or dc.example.com" /></label>
               <label>Port <input name="port" type="number" placeholder="389" value="389" /></label>
-              <label>Base DN <input name="baseDn" placeholder="DC=example,DC=com" /></label>
               <label>Admin Group <input name="adminGroup" placeholder="Cajal-Admins" /></label>
               <label>Monitor Group <input name="monitorGroup" placeholder="Cajal-Monitors" /></label>
-              <label>Service Account DN <input name="bindDn" placeholder="CN=svc-cajal,OU=Service,DC=example,DC=com" /></label>
+              <label>Service Account <input name="bindDn" placeholder="svcaccount@domain.com" /></label>
               <label>Service Account Password <input name="bindPassword" type="password" placeholder="Service account password" /></label>
+              <details class="ldap-advanced">
+                <summary>Advanced</summary>
+                <label>Base DN <input name="baseDn" placeholder="DC=example,DC=com — auto-discovered if blank" /></label>
+              </details>
               <div class="ldap-form-actions">
                 <button type="submit">Save LDAP Config</button>
                 <button id="ldapTestBtn" type="button" class="ghost-btn">Test &amp; Sync</button>

@@ -352,7 +352,7 @@ const TOOLS_TERMINAL_DEFAULT_TOP_LEVEL_COMMANDS = Object.freeze([
 const TOOLS_TERMINAL_DEFAULT_SUBCOMMANDS = Object.freeze({
   help: [],
   status: [],
-  snmp: ['poll', 'diag', 'probe'],
+  snmp: ['poll', 'diag', 'probe', 'info'],
   syslog: ['diag'],
   netflow: ['diag', 'top'],
   listeners: [],

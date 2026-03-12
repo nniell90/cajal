@@ -346,19 +346,25 @@ const TOOLS_TERMINAL_DEFAULT_TOP_LEVEL_COMMANDS = Object.freeze([
   'ping',
   'traceroute',
   'dns',
+  'tcp',
+  'arp',
+  'mib',
   'clear',
   'cls'
 ]);
 const TOOLS_TERMINAL_DEFAULT_SUBCOMMANDS = Object.freeze({
   help: [],
   status: [],
-  snmp: ['poll', 'diag', 'probe', 'info'],
-  syslog: ['diag'],
+  snmp: ['poll', 'diag', 'probe', 'info', 'walk'],
+  syslog: ['diag', 'test'],
   netflow: ['diag', 'top'],
   listeners: [],
   ping: ['<host>'],
   traceroute: ['<host>'],
   dns: ['<hostname>'],
+  tcp: ['<host>', '<port>'],
+  arp: ['<host>'],
+  mib: ['<oid-or-name>'],
   clear: [],
   cls: []
 });

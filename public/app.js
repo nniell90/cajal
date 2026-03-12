@@ -352,7 +352,7 @@ const TOOLS_TERMINAL_DEFAULT_TOP_LEVEL_COMMANDS = Object.freeze([
 const TOOLS_TERMINAL_DEFAULT_SUBCOMMANDS = Object.freeze({
   help: [],
   status: [],
-  snmp: ['poll', 'diag'],
+  snmp: ['poll', 'diag', 'probe'],
   syslog: ['diag'],
   netflow: ['diag', 'top'],
   listeners: [],
@@ -4460,7 +4460,6 @@ function monitorEditor(site) {
         <button type="submit">Save ${protocolLabel(protocol)} Settings</button>
         <button type="button" class="monitor-diagnostic-btn ghost-btn">Run Diagnostics</button>
         ${isSnmp ? '<button type="button" class="snmp-test-btn ghost-btn">Test SNMP Now</button>' : ''}
-        ${isSnmp ? '<button type="button" class="snmp-oid-probe-btn ghost-btn">Probe OIDs</button>' : ''}
         ${isSyslog ? '<button type="button" class="syslog-test-btn ghost-btn">Test Syslog Now</button>' : ''}
         ${isNetflow ? '<button type="button" class="netflow-test-btn ghost-btn">Test NetFlow Now</button>' : ''}
         <button type="button" class="monitor-close-btn ghost-btn">Close</button>
@@ -6881,45 +6880,6 @@ document.addEventListener('click', (event) => {
       })
       .finally(() => {
         snmpTestButton.disabled = false;
-      });
-    return;
-  }
-
-  const snmpOidProbeButton = event.target.closest('.snmp-oid-probe-btn');
-  if (snmpOidProbeButton) {
-    if (!canAdmin()) return;
-    const editor = snmpOidProbeButton.closest('.monitor-editor');
-    if (!editor) return;
-    const msg = editor.querySelector('.monitor-save-msg');
-    const formData = new FormData(editor);
-    const siteId = String(formData.get('siteId') || '');
-    const protocol = String(formData.get('monitorProtocol') || '');
-    if (!siteId || protocol !== 'snmp') return;
-    const config = {};
-    for (const [key, value] of formData.entries()) {
-      if (key === 'siteId' || key === 'monitorProtocol' || key === 'enabled') continue;
-      config[key] = String(value).trim();
-    }
-    snmpOidProbeButton.disabled = true;
-    if (msg) msg.textContent = 'Probing OIDs...';
-    getJson(`/api/sites/${encodeURIComponent(siteId)}/monitors/snmp/oid-probe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config })
-    })
-      .then((result) => {
-        const lines = (result.results || []).map((r) => {
-          const icon = r.status === 'ok' ? '[OK]' : r.status === 'empty' ? '[EMPTY]' : '[ERR]';
-          return `${icon} ${r.label} (${r.oid}) — ${r.rows} rows in ${r.durationMs}ms${r.sample ? ': ' + r.sample.split('\n')[0].slice(0, 80) : ''}`;
-        });
-        if (msg) msg.textContent = lines.join(' | ');
-        console.log('[SNMP OID Probe]', result.results);
-      })
-      .catch((err) => {
-        if (msg) msg.textContent = `OID probe failed: ${err.message}`;
-      })
-      .finally(() => {
-        snmpOidProbeButton.disabled = false;
       });
     return;
   }

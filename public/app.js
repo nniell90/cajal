@@ -4911,7 +4911,7 @@ function lanLinkMonitorCard(site, metrics) {
         </div>
         <div class="top-controls">
           ${allowManage ? `<button type="button" class="ghost-btn lan-link-edit-btn${showLanEditor ? ' active' : ''}" data-site-id="${escapeHtml(site.id)}">EDIT</button>` : ''}
-          ${allowDelete ? `<button type="button" class="ghost-btn lan-link-delete-btn delete-device" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name || site.id)}">DELETE</button>` : ''}
+          ${allowDelete ? `<button type="button" class="ghost-btn lan-link-delete-btn" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name || site.id)}">DELETE</button>` : ''}
         </div>
       </div>
       ${showLanEditor
@@ -6546,6 +6546,50 @@ document.addEventListener('click', (event) => {
     const monitorId = String(locationPingEditButton.dataset.monitorId || '').trim().toLowerCase();
     if (!sectionId || !monitorId) return;
     openLocationPingMonitorDialog({ sectionId, monitorId });
+    return;
+  }
+
+  const lanLinkDeleteButton = event.target.closest('.lan-link-delete-btn');
+  if (lanLinkDeleteButton) {
+    if (!canAdmin()) return;
+    const siteId = String(lanLinkDeleteButton.dataset.siteId || '').trim();
+    const siteName = String(lanLinkDeleteButton.dataset.siteName || siteId).trim();
+    if (!siteId) return;
+    const site = sites.find((s) => s.id === siteId);
+    const isLanLinkOnly = normalizeRole(site?.role) === 'other';
+    if (isLanLinkOnly) {
+      askActionConfirm({
+        title: 'Delete LAN Link Device',
+        message: `Delete "${siteName}"? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        dangerous: true
+      })
+        .then((ok) => {
+          if (!ok) return null;
+          return getJson(`/api/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' })
+            .then(async () => { showToast('LAN Link Deleted'); await loadDashboard(); });
+        })
+        .catch((err) => setNotice(err.message));
+    } else {
+      askActionConfirm({
+        title: 'Remove LAN Link Card',
+        message: `Disable SNMP monitoring for "${siteName}"? The device will remain, only the LAN link card is removed.`,
+        confirmLabel: 'Disable SNMP',
+        cancelLabel: 'Cancel',
+        dangerous: false
+      })
+        .then((ok) => {
+          if (!ok) return null;
+          return getJson(`/api/sites/${encodeURIComponent(siteId)}/monitors/snmp`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: false })
+          })
+            .then(async () => { showToast('SNMP Disabled'); await loadDashboard(); });
+        })
+        .catch((err) => setNotice(err.message));
+    }
     return;
   }
 

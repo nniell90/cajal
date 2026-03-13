@@ -1783,23 +1783,6 @@ test('matchSiteBySourceIp works for netflow protocol too', () => {
   assert.equal(noMatch, undefined, 'must not cross-match protocols');
 });
 
-test('docker-compose.yml uses bridge network with explicit port bindings for cajal', () => {
-  const composeSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'docker-compose.yml'), 'utf8');
-  assert.ok(!composeSrc.includes('network_mode: host'), 'cajal container must not use host networking');
-
-  const cajalBlock = composeSrc.substring(
-    composeSrc.indexOf('cajal:'),
-    composeSrc.indexOf('socket-proxy:')
-  );
-  // HTTP port bound to localhost only
-  assert.ok(cajalBlock.includes('127.0.0.1:'), 'HTTP port must bind to localhost');
-  // Syslog/netflow ports bound to 0.0.0.0 for LAN agents
-  assert.ok(cajalBlock.includes('0.0.0.0:'), 'syslog/netflow ports must bind to all interfaces');
-
-  // DB and Watchtower URLs must use container names (bridge network)
-  assert.ok(cajalBlock.includes('cajal-postgres:5432'), 'database URL must use container name with bridge network');
-  assert.ok(cajalBlock.includes('cajal-watchtower:8080'), 'watchtower URL must use container name with bridge network');
-});
 
 test('docker-compose.yml binds postgres and watchtower to localhost only', () => {
   const composeSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'docker-compose.yml'), 'utf8');

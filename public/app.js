@@ -5227,6 +5227,12 @@ settingsPanel?.addEventListener('click', (event) => {
   const section = toggle.closest('.settings-section');
   if (!section || section.hidden) return;
   section.classList.toggle('is-collapsed');
+  // Clear API token reveal value when the section containing it is collapsed
+  if (section.contains(apiTokenReveal) && section.classList.contains('is-collapsed')) {
+    apiTokenState.revealToken = '';
+    if (apiTokenRevealValue) apiTokenRevealValue.textContent = '';
+    if (apiTokenReveal) apiTokenReveal.hidden = true;
+  }
 });
 
 apiTokenCopyBtn?.addEventListener('click', async () => {

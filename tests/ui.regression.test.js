@@ -888,3 +888,115 @@ test('LDAP file tracked in constants', () => {
   assert.ok(constants.includes('LDAP_FILE'), 'LDAP_FILE must be defined in constants');
   assert.ok(constants.includes("'ldap'"), 'ldap must be in CONFIG_INTEGRITY_KEYS');
 });
+
+// ── QA fix regression tests ───────────────────────────────────────────────────
+
+test('POST /api/devices returns 404 for unknown siteId', () => {
+  const devices = readFile('lib/routes/devices.js');
+  const siteCheck = devices.indexOf('siteId does not match any existing site');
+  assert.ok(siteCheck >= 0, 'siteId validation message not found');
+  const around = devices.slice(Math.max(0, siteCheck - 60), siteCheck + 60);
+  assert.ok(around.includes('404'), 'siteId mismatch must return 404, not 400');
+});
+
+test('POST /api/devices validates IP format', () => {
+  const devices = readFile('lib/routes/devices.js');
+  assert.ok(devices.includes('net.isIP(body.ip)'), 'IP validation via net.isIP must be present');
+  assert.ok(devices.includes('ip must be a valid IPv4 or IPv6 address'), 'IP validation error message must exist');
+});
+
+test('POST /api/users returns 201 for new users, 200 for update', () => {
+  const users = readFile('lib/routes/users.js');
+  assert.ok(users.includes('isNew ? 201 : 200'), 'user creation must return 201, update 200');
+});
+
+test('backup import filters site IDs with SAFE_ID_RE', () => {
+  const backup = readFile('lib/routes/backup.js');
+  assert.ok(backup.includes('SAFE_ID_RE'), 'SAFE_ID_RE must be defined');
+  assert.ok(backup.includes('/^[a-zA-Z0-9_-]+$/'), 'SAFE_ID_RE pattern must match safe ID characters');
+  const filterIdx = backup.indexOf('.filter((site) => SAFE_ID_RE.test(site.id))');
+  assert.ok(filterIdx >= 0, 'imported sites must be filtered by SAFE_ID_RE');
+  const deviceFilterIdx = backup.indexOf('SAFE_ID_RE.test(d.id)');
+  assert.ok(deviceFilterIdx >= 0, 'imported devices must be filtered by SAFE_ID_RE');
+});
+
+test('backup password requires at least 16 characters', () => {
+  const crypto = readFile('lib/crypto.js');
+  assert.ok(crypto.includes('pass.length < 16'), 'backup password minimum must be 16 characters');
+  assert.ok(crypto.includes('at least 16 characters'), 'error message must state 16 character minimum');
+});
+
+test('static file server uses path.resolve to prevent traversal', () => {
+  const router = readFile('lib/router.js');
+  assert.ok(router.includes('path.resolve(PUBLIC_DIR, safePath)'), 'path.resolve must be used for static files');
+  assert.ok(router.includes('fullPath.startsWith(PUBLIC_DIR)'), 'path traversal guard must be present');
+});
+
+test('docker-compose.yml has healthcheck on cajal service', () => {
+  const compose = readFile('docker-compose.yml');
+  assert.ok(compose.includes('healthcheck'), 'docker-compose must define healthcheck');
+  assert.ok(compose.includes('/api/health'), 'healthcheck must target /api/health');
+});
+
+test('Dockerfile drops privileges to node user', () => {
+  const dockerfile = readFile('Dockerfile');
+  assert.ok(dockerfile.includes('USER node'), 'Dockerfile must set USER node before CMD');
+});
+
+test('.dockerignore excludes .github directory', () => {
+  const dockerignore = readFile('.dockerignore');
+  assert.ok(dockerignore.includes('.github'), '.dockerignore must exclude .github/');
+});
+
+test('OAuth state entries have 10-minute TTL pruning', () => {
+  const auth = readFile('lib/routes/auth.js');
+  assert.ok(auth.includes('600000'), 'OAuth state TTL must be 600000ms (10 minutes)');
+  assert.ok(auth.includes('oauthState.delete(k)'), 'expired OAuth state entries must be pruned');
+});
+
+test('OAuth token fetch has AbortController timeout', () => {
+  const auth = readFile('lib/routes/auth.js');
+  assert.ok(auth.includes('AbortController'), 'OAuth token fetch must use AbortController');
+  assert.ok(auth.includes('abortCtl.signal'), 'AbortController signal must be passed to fetch');
+  assert.ok(auth.includes('clearTimeout(fetchTimer)'), 'fetch timer must be cleared in finally');
+});
+
+test('logout endpoint is rate-limited', () => {
+  const auth = readFile('lib/routes/auth.js');
+  const logoutIdx = auth.indexOf("url.pathname === '/api/auth/logout'");
+  assert.ok(logoutIdx >= 0, 'logout route not found');
+  const logoutBlock = auth.slice(logoutIdx, logoutIdx + 400);
+  assert.ok(logoutBlock.includes('enforceRateLimitOrSend'), 'logout must be rate-limited');
+});
+
+test('CSP does not allow data: URIs in img-src', () => {
+  const session = readFile('lib/session.js');
+  assert.ok(session.includes("img-src 'self' https:"), "img-src must be 'self' https: only");
+  assert.ok(!session.includes("img-src 'self' data:"), "img-src must not allow data: URIs");
+});
+
+test('API token reveal value is cleared on settings section collapse', () => {
+  const js = readFile('public/app.js');
+  assert.ok(js.includes('apiTokenReveal') && js.includes('is-collapsed'), 'token reveal clear on collapse must reference both apiTokenReveal and is-collapsed');
+  assert.ok(js.includes("apiTokenRevealValue.textContent = ''"), 'token reveal textContent must be cleared');
+});
+
+test('form submit buttons are disabled during submission to prevent double-submit', () => {
+  const js = readFile('public/app.js');
+  // addDeviceForm
+  const deviceFormIdx = js.indexOf("addDeviceForm?.addEventListener('submit'");
+  assert.ok(deviceFormIdx >= 0, 'addDeviceForm submit handler not found');
+  const deviceFormBlock = js.slice(deviceFormIdx, deviceFormIdx + 2500);
+  assert.ok(deviceFormBlock.includes('submitBtn.disabled = true'), 'addDeviceForm must disable submit on submit');
+  assert.ok(deviceFormBlock.includes('submitBtn.disabled = false'), 'addDeviceForm must re-enable submit in finally');
+  // addUserForm
+  const userFormIdx = js.indexOf("addUserForm?.addEventListener('submit'");
+  assert.ok(userFormIdx >= 0, 'addUserForm submit handler not found');
+  const userFormBlock = js.slice(userFormIdx, userFormIdx + 400);
+  assert.ok(userFormBlock.includes('submitBtn.disabled = true'), 'addUserForm must disable submit on submit');
+  // addLocationForm
+  const locationFormIdx = js.indexOf("addLocationForm?.addEventListener('submit'");
+  assert.ok(locationFormIdx >= 0, 'addLocationForm submit handler not found');
+  const locationFormBlock = js.slice(locationFormIdx, locationFormIdx + 800);
+  assert.ok(locationFormBlock.includes('submitBtn.disabled = true'), 'addLocationForm must disable submit on submit');
+});
